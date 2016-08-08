@@ -1248,7 +1248,7 @@ int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
     }
     rtrim(in_term_id1);
     rtrim(in_term_id2);
-    dcs_debug(0,0,"at %s(%s:%d), term_id=[%s],term_id2=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,in_term_id1,in_term_id2);
+    dcs_debug(0,0,"at %s(%s:%d), term_id=[%s],term_id2=[%s]",__FUNCTION__,__FILE__,__LINE__,in_term_id1,in_term_id2);
     if(in_term_id1[0] == 0) strcpy(in_term_id1, "NULL");
     if(in_term_id2[0] == 0) strcpy(in_term_id2, "NULL");
     if(para != NULL && strlen(para) >0) {
@@ -1831,7 +1831,7 @@ int get_route_insti_info(glob_msg_stru * pub_data_stru) {
     pub_data_stru->route_insti_link_type=link_type[0]-0x30;
     if(cry_type[0] == 0x31) pub_data_stru->out_cry_flag =1;
 //  else pub_data_stru->out_cry_flag =0;
-    dcs_debug(0,0,"at %s(%s:%d), route_pin_index=[%s] work_type=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_pin_index,work_type);
+    dcs_debug(0,0,"at %s(%s:%d), route_pin_index=[%s] work_type=[%s]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_pin_index,work_type);
     return 1;
 }
 
@@ -2551,7 +2551,7 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
         ret=_get_field_data_safe(pub_data_stru,s_fldid, DB_MSG_TYPE, addData, 2,sizeof(addData)-1);
         //if(ret >0) addData[ret]=0x00;
         //else addData[0]=0x00;
-        dcs_debug(0,0,"at %s(%s:%d), addData[%s]fieldAsc=[%d][%s]",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData,strlen(fieldAsc),fieldAsc);
+        dcs_debug(0,0,"at %s(%s:%d), addData[%s]fieldAsc=[%d][%s]",__FUNCTION__,__FILE__,__LINE__,addData,strlen(fieldAsc),fieldAsc);
         if(0 > SetFieldData(addData, d_fldid, fieldAsc, sizeof(addData), 1)) {
             dcs_log(0, 0, "at %s(%s:%d), 设置数据失败[%d]失败！",__FUNCTION__,__FILE__,__LINE__,d_fldid);
             EXEC SQL CLOSE SAVE_ADDIDATA_CUR;

@@ -501,6 +501,7 @@ int pack_key(char *keyBuf, int keySize, char *keySet,
 	assert(keySet );	// 2016/7/20 星期三 下午 4:56:37
 	assert(keyBuf );	// 2016/7/20 星期三 下午 4:56:40
 	
+	rtrim(keySet);
 	for(p=my_split(keySet, ',',identifier, sizeof(identifier));p ;
 	     p=my_split(p, ',',identifier, sizeof(identifier)))
 	{
@@ -522,6 +523,7 @@ int pack_key(char *keyBuf, int keySize, char *keySet,
 				continue;
 		  }
 		}
+		
 		if(offset + n > keySize)
 		{
 			dcs_log(0, 0, "<%s>缓冲区溢出！offset[%d], n[%d], size[%d]", 
@@ -538,8 +540,7 @@ int pack_key(char *keyBuf, int keySize, char *keySet,
 			keyBuf[offset++] = d;
 		}
 		else
-			  offset +=snprintf(keyBuf + offset,sizeof(keyBuf)-offset,"%s", tmp);
-
+			  offset +=snprintf(keyBuf + offset,keySize-offset,"%s", tmp);
 	}
 	if(d)
 	{	

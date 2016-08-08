@@ -2328,11 +2328,11 @@ int tpos_gen_field_conver(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		}
 		if(0 > get_field_data_safe(pub_data_stru,
 			                         FIELD_PIN, 
-			                         pub_data_stru->route_msg_type,
+			                         pub_data_stru->in_msg_type,
 			                         tmp,sizeof(tmp))) return 1;
 		l=get_field_data_safe( pub_data_stru,
 		                       FIELD_CARD_NO,
-		                       pub_data_stru->route_msg_type,
+		                       pub_data_stru->in_msg_type,
 		                       tmp1,sizeof(tmp1));
 		if( l >0 ) tmp1[l]=0x00;
 		if(13 >=l ) 
