@@ -1,0 +1,261 @@
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "base.h"
+#include "var.h"
+#include "tools.h"
+#include "db_qfunc.h"
+#include "db_tools.h"
+#include "general_util.h"
+EXEC SQL INCLUDE sqlca;
+/**
+获取当前进入报文的重要信息域字段集合，机构号等域
+**/
+int get_insti_field_name(glob_msg_stru *pub_data_stru,char *field_name,int size)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char msg_type[5];
+	char insti_name[40];
+	EXEC SQL END DECLARE SECTION;
+	
+	get_in_msg_type(pub_data_stru,msg_type,sizeof(msg_type));
+	
+	EXEC SQL select insti_field into :insti_name from pkg_insti_field
+		       where msg_type = :msg_type;
+	if ( sqlca.sqlcode !=0 )
+  {
+  	 dcs_log( 0,0, "<%s>select insti_field table error ! msg_type=[%s]\n[%s]",__FUNCTION__,msg_type ,sqlca.sqlerrm.sqlerrmc);
+  	 return -1;
+  }	
+  rtrim(insti_name);
+  return snprintf(field_name,size,"%s",insti_name);
+}
+
+/**
+根据fold 名字获取对应机构代码
+**/
+int folder_to_insti_code(char * fold_name,char *insti_code,int size)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char tmp[10];
+	EXEC SQL END DECLARE SECTION;
+	ICS_DEBUG(0);
+
+	exec sql select insti_code into :tmp from insti_info where fold_name=:fold_name;
+	
+	if( sqlca.sqlcode !=0 )
+	{
+		dcs_log(0,0, "<%s>select insti_info table error ! fold_name=[%s],\n %s",
+		        __FUNCTION__,gs_fold_name,sqlca.sqlerrm.sqlerrmc );
+		return -1;
+	}
+	rtrim(tmp);
+	return snprintf(insti_code,size,"%s",tmp);
+}
+
+//获取机构信息
+int get_insti_info(glob_msg_stru * pub_data_stru)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char mac_index[6],mac_key[33],pin_index[6],pin_key[33],fold_name[40];
+	char data_index[6],data_key[33], is_check_mac[2],link_type[2],work_type[2],open_flag[2];
+	
+	EXEC SQL END DECLARE SECTION;
+
+	exec sql select  mac_index,mac_key,pin_index,pin_key,data_index,data_key,
+	     is_check_mac,link_type,work_type,open_flag,fold_name 
+	       into 
+	      :mac_index,:mac_key,:pin_index,:pin_key,:data_index,:data_key,
+	      :is_check_mac,:link_type,:work_type,:open_flag ,:fold_name
+	     from insti_info where insti_code = :pub_data_stru->insti_code;
+	if( sqlca.sqlcode !=0 )
+	{
+		dcs_log(0,0, "<%s>select insti_info table error ! insti_code=[%s]\n%s",
+		           __FUNCTION__,pub_data_stru->insti_code,sqlca.sqlerrm.sqlerrmc );
+		return -1;
+	}
+  rtrim(mac_index);
+  rtrim(mac_key);
+  rtrim(pin_index);
+  rtrim(pin_index);
+  rtrim(data_index);
+  rtrim(data_key);
+	snprintf(pub_data_stru->in_mac_index,6,"%s",mac_index);
+	snprintf(pub_data_stru->in_mac_key,33,"%s",mac_key);
+	snprintf(pub_data_stru->in_pin_index,6,"%s",pin_index);
+	snprintf(pub_data_stru->in_pin_key,33,"%s",pin_key);
+	snprintf(pub_data_stru->in_data_index,6,"%s",data_index);
+	snprintf(pub_data_stru->in_data_key,33,"%s",data_key);
+	pub_data_stru->is_check_mac=is_check_mac[0]-0x30;
+	pub_data_stru->insti_open_flag=open_flag[0]-0x30;
+	pub_data_stru->insti_work_type=work_type[0]-0x30;
+	pub_data_stru->insti_link_type=link_type[0]-0x30;
+	return 1;
+}
+
+int get_msg_key(glob_msg_stru * pub_data_stru)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char field_id_set[100+1],tmp[60];
+	EXEC SQL END DECLARE SECTION;
+	int offset=0,n,id;
+	char *p=NULL;
+	exec sql select field_id_set into :field_id_set  from msg_key 
+		 where msg_type= :pub_data_stru->in_msg_type;
+	if( sqlca.sqlcode !=0)
+	{
+		dcs_log(0,0, "<%s>select msg_key table error ! msg_type=[%s]\n[%s]",
+		        __FUNCTION__,pub_data_stru->in_msg_type,sqlca.sqlerrm.sqlerrmc );
+		return -1;
+	}
+	rtrim(field_id_set);
+
+  for( p=my_split(field_id_set,',',tmp,sizeof(tmp)),offset=0;
+       p;p=my_split(p,',',tmp,sizeof(tmp)))
+  {
+    pub_data_stru->filed_key_num++;
+    if( pub_data_stru->filed_key_num >5)
+    {	 
+    	dcs_log(0,0,"<%s> key_num > 5, system abnormal!",__FUNCTION__);
+    	return -1;
+    }
+    id=get_pub_field_id(pub_data_stru->in_msg_type,tmp);
+    pub_data_stru->filed_key_field_id[pub_data_stru->filed_key_num]=id;
+  	n=get_field_data_safe(pub_data_stru,id,pub_data_stru->in_msg_type,tmp,sizeof(tmp));
+    if ( 0>n ) n=0;
+    snprintf(pub_data_stru->msg_key+offset,60-offset,"%s",tmp);
+    offset=offset+n;
+    if( offset >=60)
+    {
+    	dcs_log(0,0,"<%s>关键字缓冲区溢出! offset=%d",__FUNCTION__,offset);
+    	return -1;
+    }
+  }
+	return 1;
+}
+
+int get_msg_intout_flag(glob_msg_stru * pub_data_stru)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char field_id_set[100+1],tmp[64],str[128];
+	int offset=0,n,forward;
+	EXEC SQL END DECLARE SECTION;
+	
+	char *p=NULL;
+	memset(field_id_set,0,sizeof(field_id_set));
+	exec sql select field_id_set into :field_id_set  from msg_forward_set 
+		        where msg_type= :pub_data_stru->in_msg_type;
+	if( sqlca.sqlcode !=0)
+	{	
+		dcs_log(0,0, "<%s>select msg_forward_set table error ! msg_type=[%s]\n%s",
+		        __FUNCTION__,pub_data_stru->in_msg_type,sqlca.sqlerrm.sqlerrmc);
+		return -1;
+	}
+	rtrim(field_id_set);
+	
+  for( p=my_split(field_id_set,',',tmp,sizeof(tmp)),offset=0;
+       p;p=my_split(p,',',tmp,sizeof(tmp)))
+  {
+   	n=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,tmp),
+   	                      pub_data_stru->in_msg_type,tmp,sizeof(tmp));
+  	if( n<0 ) n=0;
+  	if( offset+n >=60)
+    {
+    	dcs_log(0,0,"关键字缓冲区溢出! offset=%d",offset+n);
+    	return -1;
+    }
+    snprintf(str+offset,sizeof(str)-offset,"%s",tmp);
+    offset=offset+n;
+  }
+  exec sql select forward into :forward from msg_forward where 
+  	        msg_type= :pub_data_stru->in_msg_type and key=:str; 
+	if( sqlca.sqlcode !=0)
+	{
+		dcs_log(0,0, "<%s>select msg_forward table error ! msg_type=[%s],key=[%s]\n%s",
+		        __FUNCTION__,pub_data_stru->in_msg_type,str,sqlca.sqlerrm.sqlerrmc );
+		return -1;
+	}
+	if( forward == 0)
+		pub_data_stru->req_flag=1;
+	return forward;
+}
+
+//确定报文所对应的业务品种
+int confirm_app_type(glob_msg_stru *pub_data_stru)
+{
+  EXEC SQL BEGIN DECLARE SECTION;
+  char tmp_buf1[128+1],tmp_buf2[128],type[2];
+  char app_type[5],trans_type[5],open_flag[2],permit_void[2];
+  EXEC SQL END DECLARE SECTION;
+  
+ 
+  exec sql select  key_id into :tmp_buf1 from app_type_def where 
+  	       msg_type =:pub_data_stru->in_msg_type ;
+  
+  if ( sqlca.sqlcode !=0 )
+  {
+  	dcs_log( 0,0, "<%s>select app_type_def table error ! msg_type=[%s]\n%s",
+  	       __FUNCTION__,pub_data_stru->in_msg_type,sqlca.sqlerrm.sqlerrmc );
+  	 return -1;
+  }
+  rtrim(tmp_buf1);
+  pack_key(tmp_buf2, sizeof(tmp_buf2), tmp_buf1, pub_data_stru, 
+           pub_data_stru->in_msg_type, 0, 0);
+  
+  if ( strlen(tmp_buf2) >0)
+  {
+  	 memset(app_type,0,sizeof(app_type));
+     memset(trans_type,0,sizeof(trans_type));
+  	 memset(open_flag,0,sizeof(open_flag));
+  	 memset(type,0,sizeof(type));
+  	 exec sql select app_type,open_flag ,trans_type,type,permit_void into 
+  	          :app_type,:open_flag,:trans_type,:type,:permit_void from app_type   
+  	 	        where msg_type= :pub_data_stru->in_msg_type and app_key=:tmp_buf2;
+  	 if( sqlca.sqlcode !=0)
+  	 {
+  	 	  dcs_log( 0,0, "<%s>select app_type table error ! msg_type=[%s]key=[%s]\n%s",
+  	 	         __FUNCTION__,pub_data_stru->in_msg_type,tmp_buf2,sqlca.sqlerrm.sqlerrmc );
+  	    return -1; 
+  	 }
+  	 snprintf(pub_data_stru->app_type,5,"%s",app_type);
+  	 snprintf(pub_data_stru->in_trans_type,5,"%s",trans_type);
+  	 pub_data_stru->open_flag=open_flag[0]-0x30;     //业务是否打开
+  	 pub_data_stru->permit_void=permit_void[0]-0x30; //该业务是否允许冲正
+  	 dcs_debug(0,0,"<%s> msg_type=[%s] app_type=%s,trans_type=%s,permit_void=[%c]",
+  	           __FUNCTION__,pub_data_stru->in_msg_type,app_type,trans_type,
+  	           permit_void[0]);
+  }
+  else
+  {
+  	dcs_log(0,0,"<%s> key_id is null",__FUNCTION__);
+  	return -1;
+  }
+// 确定该交易的基本流程，是否需要做转接处理  	
+  if( type[0]==0x30) // 走直接应答处理
+  	return 0; 
+  else
+    return 1;
+
+}
+
+int get_direct_name(const char *msg_type,const char *app_type,char *name,int size)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+	char tmp[41];
+	EXEC SQL END DECLARE SECTION;
+	
+	exec sql select func_name into :tmp from direct_proc where 
+		    msg_type=:msg_type and app_type=:app_type ;
+	
+	if( sqlca.sqlcode !=0)
+	{
+		dcs_log(0,0, "<%s>select direct_proc table error ! msg_type=[%s],app_type=[%s]\n%s",
+		              __FUNCTION__,msg_type,app_type,sqlca.sqlerrm.sqlerrmc);
+		return -1;
+	}
+	rtrim(tmp);
+	snprintf(name,size,"%s",tmp);
+	return 1;
+}

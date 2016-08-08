@@ -1,0 +1,450 @@
+#include "base.h"
+#include "var.h"
+#include "general_util.h"
+#include "tpos.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "ibdcs.h"
+#include "db_tools.h"
+#include "db_qfunc.h"
+
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+//EXEC ORACLE OPTION(RELEASE_CURSOR = YES);
+
+
+int db_insert(glob_msg_stru * pub_data_stru,int flag) {
+    int i;
+    ICS_DEBUG(0);
+    save_addidata(pub_data_stru, 3);
+    for(i=0; gl_db_iproc[i].func!=NULL; i++) {
+        if(strcmp(pub_data_stru->in_msg_type,gl_db_iproc[i].name)==0)
+            return gl_db_iproc[i].func(pub_data_stru,flag);
+    }
+    return db_genrate_insert(pub_data_stru, flag);
+}
+
+
+int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
+    tl_trans_log_def translog;
+    char trans_log_field[20 + 1];
+    char field_name[40 + 1];
+    int from,len;
+    char msg_type[4 + 1];
+    short field_id;
+    int ret;
+    char field_val[1024 + 1];
+    ICS_DEBUG(0);
+    memset(&translog, 0, sizeof(translog));
+    time_t tl;
+    struct tm *time_tm;
+    time(&tl);
+    time_tm = localtime(&tl);
+//  dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+    if(strftime(field_val, 20, "%Y%m%d %H%M%S", time_tm) == 0) return -1;
+    field_val[8] = 0;
+    SetTransLog(&translog, "SYS_DATE", field_val, 0, pub_data_stru);
+    SetTransLog(&translog, "SYS_TIME", field_val + 9, 0, pub_data_stru);
+
+    EXEC SQL DECLARE TRANSLOG_SAVE_SET_CUR CURSOR FOR
+    SELECT TRANS_LOG_FIELD, FIELD_ID, DATA_FROM
+    FROM TRANSLOG_SAVE_SET
+    WHERE (TRANS_TYPE = :pub_data_stru->in_trans_type or trans_type ='*') and ( in_msg_type='*' or in_msg_type= :pub_data_stru->in_msg_type)
+    ORDER BY IN_MSG_TYPE, TRANS_TYPE;
+    EXEC SQL OPEN TRANSLOG_SAVE_SET_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN TRANSLOG_SAVE_SET_CUR, in_msg_type=[%S] trans_type[%s] Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->in_trans_type);
+        return -1;
+    }
+    ret = 1;
+//  dcs_debug(0,0,"<%s> proc 1",__FUNCTION__);
+    while(1) {
+        memset(field_name, 0, sizeof(field_name));
+        memset(msg_type, 0, sizeof(msg_type));
+        memset(trans_log_field, 0, sizeof(trans_log_field));
+        EXEC SQL FETCH TRANSLOG_SAVE_SET_CUR INTO :trans_log_field, :field_id, :from;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH TRANSLOG_SAVE_SET_CUR, in_msg_type=[%S] trans_type[%s] Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->in_trans_type);
+            EXEC SQL CLOSE TRANSLOG_SAVE_SET_CUR;
+            return -1;
+        }
+        rtrim(trans_log_field);
+        if(from == 0) {
+            strcpy_s(msg_type, pub_data_stru->in_msg_type, sizeof(msg_type));
+        } else if(from == 1) {
+            strcpy_s(msg_type, pub_data_stru->route_msg_type, sizeof(msg_type));
+        } else if(from == 2) {
+            strcpy_s(msg_type, DB_MSG_TYPE, sizeof(msg_type));
+        }
+
+        if(0 >(len= _get_field_data_safe(pub_data_stru, field_id, msg_type,
+                                         field_val, from,sizeof(field_val)-1))) {
+//          if(0 > get_field_data(field_id, pub_data_stru, field_val))
+            continue;
+        }
+        //field_val[len]=0x00;
+        if(0 > SetTransLog(&translog, trans_log_field, field_val, field_id, pub_data_stru)) {
+            dcs_log(0, 0, "at %s(%s:%d) SetTransLog消息类型[%s]定义域[%s]出错",__FUNCTION__,__FILE__,__LINE__, msg_type, field_name);
+            ret = -1;
+            break;
+        }
+    }
+    EXEC SQL CLOSE TRANSLOG_SAVE_SET_CUR;
+//  dcs_debug(0,0,"<%s> proc 2",__FUNCTION__);
+    strcpy_s(translog.acq_insti_code, pub_data_stru->insti_code, sizeof(translog.acq_insti_code));
+    SetTransLog(&translog, "ACQ_MSG_TYPE", pub_data_stru->in_msg_type, 0, pub_data_stru);
+    SetTransLog(&translog, "ACQ_TRANS_TYPE", pub_data_stru->in_trans_type, 0, pub_data_stru);
+    SetTransLog(&translog, "APP_TYPE", pub_data_stru->app_type, 0, pub_data_stru);
+//  dcs_debug(0,0,"<%s> step_type=%d",__FUNCTION__,pub_data_stru->step_type);
+    if(pub_data_stru->step_type == 1) {
+        SetTransLog(&translog, "PAY_MSG_TYPE", pub_data_stru->route_msg_type, 0, pub_data_stru);
+        SetTransLog(&translog, "PAY_TRANS_TYPE", pub_data_stru->route_trans_type, 0, pub_data_stru);
+    } else if(pub_data_stru->step_type == 2) {
+        SetTransLog(&translog, "APP_MSG_TYPE", pub_data_stru->route_msg_type, 0, pub_data_stru);
+        SetTransLog(&translog, "APP_TRANS_TYPE", pub_data_stru->route_trans_type, 0, pub_data_stru);
+    }
+    SetTransLog(&translog, "RESP_CD_RCV", pub_data_stru->center_result_code, 0, pub_data_stru);
+    sprintf(field_val, "%d", pub_data_stru->route_num);
+    SetTransLog(&translog, "STEP", field_val, 0, pub_data_stru);
+    if(pub_data_stru->in_cry_flag) SetTransLog(&translog, "ACQ_CRY_TYPE","1", 0, pub_data_stru);
+    else  SetTransLog(&translog, "ACQ_CRY_TYPE","0", 0, pub_data_stru);
+
+    if(translog.acq_tra_no[0] == 0) strcpy(translog.acq_tra_no, "NULL");
+    if(translog.acq_date[0] == 0) strcpy(translog.acq_date, "NULL");
+    if(translog.acq_term_id1[0] == 0) strcpy(translog.acq_term_id1, "NULL");
+    if(translog.acq_term_id2[0] == 0) strcpy(translog.acq_term_id2, "NULL");
+    if(translog.void_flag[0] == 0 || translog.void_flag[0] == ' ') strcpy(translog.void_flag, "0");
+//  if(pub_data_stru->timeout_table.flag[0] == '1' ||  pub_data_stru->timeout_table.flag[0] == '2')
+//      strcpy(translog.permit_void, "1");
+    translog.permit_void[0]=pub_data_stru->permit_void;
+    dcs_debug(0, 0, "at %s(%s:%d) permit_void db[%s],cache[%c]",__FUNCTION__,__FILE__,__LINE__,
+              translog.permit_void,pub_data_stru->permit_void);
+//  else
+//      strcpy(translog.permit_void, "0");
+    if(0 > _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, translog.acq_mac,0,16)) {
+        dcs_log(0, 0, "at %s(%s:%d) _get_field_data_safe[%d] error",__FUNCTION__,__FILE__,__LINE__,FIELD_MAC);
+    }
+//  dcs_debug(0,0,"<%s> proc 3",__FUNCTION__);
+    if(0 < ret) {
+        EXEC SQL INSERT INTO
+        TRANSLOG
+        (
+        SYS_DATE        ,
+        SYS_TIME        ,
+        QS_DATE         ,
+        ACQ_INSTI_CODE  ,
+        PAY_INSTI_CODE  ,
+        APP_INSTI_CODE  ,
+        ACQ_MSG_TYPE    ,
+        ACQ_TRANS_TYPE  ,
+        APP_TYPE        ,
+        PAY_MSG_TYPE    ,
+        PAY_TRANS_TYPE  ,
+        APP_MSG_TYPE    ,
+        APP_TRANS_TYPE  ,
+        RESP_CD_APP     ,
+        RESP_CD_PAY     ,
+        RESP_CD_RCV     ,
+        PAY_ACCT_NO     ,
+        CARD_ATTR       ,
+        ISS_INSTI_CODE  ,
+        AMOUNT_PAY      ,
+        AMOUNT_REAL     ,
+        FEE             ,
+        ACQ_TRA_NO      ,
+        PAY_TRA_NO      ,
+        APP_TRA_NO      ,
+        ACQ_DATE        ,
+        ACQ_TIME        ,
+        PAY_DATE        ,
+        PAY_TIME        ,
+        APP_DATE        ,
+        APP_TIME        ,
+        ACQ_TERM_ID1    ,
+        ACQ_TERM_ID2    ,
+        PAY_TERM_ID1    ,
+        PAY_TERM_ID2    ,
+        APP_TERM_ID1    ,
+        APP_TERM_ID2    ,
+        ACQ_ADDITION    ,
+        PAY_ADDITION    ,
+        APP_ADDITION    ,
+        SYS_REF_NO      ,
+        POS_ENTRY_MD_CD ,
+        POS_COND_CD     ,
+        RCV_ACCT_NO     ,
+        TRANS_CURR_CD   ,
+        RESP_CD_AUTH_ID ,
+        STEP            ,
+        VOID_FLAG       ,
+        PERMIT_VOID     ,
+        ACQ_CRY_TYPE    ,
+        ACQ_MAC         ,
+        MCC             ,
+        ACQ_PROC_CODE   ,
+        pay_proc_code   ,
+        pay_msg_id      ,
+        MERCH_INFO      ,
+        last_time
+        )
+        VALUES
+        (
+        :translog.sys_date        ,
+        :translog.sys_time        ,
+        :translog.qs_date         ,
+        :translog.acq_insti_code  ,
+        :translog.pay_insti_code  ,
+        :translog.app_insti_code  ,
+        :translog.acq_msg_type    ,
+        :translog.acq_trans_type  ,
+        :translog.app_type        ,
+        :translog.pay_msg_type    ,
+        :translog.pay_trans_type  ,
+        :translog.app_msg_type    ,
+        :translog.app_trans_type  ,
+        :translog.resp_cd_app     ,
+        :translog.resp_cd_pay     ,
+        :translog.resp_cd_rcv     ,
+        :translog.pay_acct_no     ,
+        :translog.card_attr       ,
+        :translog.iss_insti_code  ,
+        :translog.amount_pay      ,
+        :translog.amount_real     ,
+        :translog.fee             ,
+        :translog.acq_tra_no      ,
+        :translog.pay_tra_no      ,
+        :translog.app_tra_no      ,
+        :translog.acq_date        ,
+        :translog.acq_time        ,
+        :translog.pay_date        ,
+        :translog.pay_time        ,
+        :translog.app_date        ,
+        :translog.app_time        ,
+        :translog.acq_term_id1    ,
+        :translog.acq_term_id2    ,
+        :translog.pay_term_id1    ,
+        :translog.pay_term_id2    ,
+        :translog.app_term_id1    ,
+        :translog.app_term_id2    ,
+        :translog.acq_addition    ,
+        :translog.pay_addition    ,
+        :translog.app_addition    ,
+        :translog.sys_ref_no      ,
+        :translog.pos_entry_md_cd ,
+        :translog.pos_cond_cd     ,
+        :translog.rcv_acct_no     ,
+        :translog.trans_curr_cd   ,
+        :translog.resp_cd_auth_id ,
+        :translog.step            ,
+        :translog.void_flag       ,
+        :translog.permit_void     ,
+        :translog.acq_cry_type    ,
+        :translog.acq_mac         ,
+        :translog.mcc             ,
+        :translog.acq_proc_code   ,
+        :translog.pay_proc_code   ,
+        :translog.pay_msg_id   ,
+        :translog.merch_info   ,
+        sysdate
+        );
+//      dcs_debug(0,0,"<%s> proc 4",__FUNCTION__);
+        if(sqlca.sqlcode == -1) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, INSERT INTO TRANSLOG Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+            return 0;
+        } else if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, INSERT INTO TRANSLOG Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+            return -1;
+        }
+        EXEC SQL COMMIT;
+    } else return -1;
+//      dcs_debug(0,0,"<%s> proc 5",__FUNCTION__);
+    memset(pub_data_stru->timeout_table.first_key, 0, sizeof(pub_data_stru->timeout_table.first_key));
+    snprintf(pub_data_stru->timeout_table.first_key,sizeof(pub_data_stru->timeout_table.first_key), "%s,%s,%s,%s,%s,%s,%s",
+             pub_data_stru->in_msg_type, translog.sys_date,translog.acq_insti_code,translog.acq_tra_no,translog.acq_date,translog.acq_term_id1,translog.acq_term_id2);
+//  dcs_debug(0,0,"<%s> end",__FUNCTION__);
+    return 1;
+}
+
+
+
+//插超时表, flag: 1：新交易，0：超时交易, 2:重新插入
+int insert_timeout_table(glob_msg_stru *pub_data_stru, int flag) {
+	timeout_stru *timeout_table = &pub_data_stru->timeout_table;
+	
+    char buf[20 + 1], field_id_set[100];
+//  int offset = 0, i, l;
+    struct tm *time_tm;
+    ICS_DEBUG(0);
+    if(flag != 2) {
+        time(&timeout_table->invalid_time);
+        time_tm = localtime(&timeout_table->invalid_time);
+        if(flag) {
+            if(strftime(buf, 20, "%Y%m%d%H%M%S", time_tm) == 0) return -1;
+            memcpy(timeout_table->sys_date, buf, 8);
+            memcpy(timeout_table->sys_time, buf + 8, 6);
+        }
+        EXEC SQL SELECT FIELD_ID_SET INTO :field_id_set
+        FROM MSG_KEY WHERE MSG_TYPE = :pub_data_stru->route_msg_type;
+        if(sqlca.sqlcode) {
+			dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select msg_key error !\n msg_type=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->route_msg_type);
+            return -1;
+        }
+        if(0 > pack_key(timeout_table->key, sizeof(timeout_table->key), field_id_set, pub_data_stru, pub_data_stru->route_msg_type, 1, 0))
+            return -1;
+        timeout_table->invalid_time += pub_data_stru->timeout <= 0 ? SYS_TIME_OUT : pub_data_stru->timeout;
+        if(timeout_table->num ==0) timeout_table->num = 30;
+    }
+    strcpy_s(timeout_table->trans_type, pub_data_stru->route_trans_type, sizeof(timeout_table->trans_type));
+    strcpy_s(timeout_table->foldname, SYSTEM_FOLDNAME, sizeof(timeout_table->foldname));
+    EXEC SQL INSERT INTO TRANSTIMEOUT
+    (
+       SYS_DATE  ,
+       SYS_TIME  ,
+       FOLDNAME  ,
+       FLAG      ,
+       TIMEOUT   ,
+       NUM       ,
+       REMARK    ,
+       KEY       ,
+       TRANS_TYPE,
+       CAKEY
+    )
+    VALUES
+    (
+       :timeout_table->sys_date,
+       :timeout_table->sys_time,
+       :timeout_table->foldname,
+       :timeout_table->flag,
+       :timeout_table->invalid_time,
+       :timeout_table->num,
+       :timeout_table->remark,
+       :timeout_table->key,
+       :timeout_table->trans_type,
+       :timeout_table->first_key
+    );
+    if(sqlca.sqlcode) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, INSERT TRANSTIMEOUT error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+        dcs_log(0, 0, "sys_date    [%s]", timeout_table->sys_date);
+        dcs_log(0, 0, "sys_time    [%s]", timeout_table->sys_time);
+        dcs_log(0, 0, "foldname    [%s]", timeout_table->foldname);
+        dcs_log(0, 0, "flag        [%s]", timeout_table->flag);
+        dcs_log(0, 0, "invalid_time[%d]", timeout_table->invalid_time);
+        dcs_log(0, 0, "remark      [%s]", timeout_table->remark);
+        dcs_log(0, 0, "num         [%d]", timeout_table->num);
+        dcs_log(0, 0, "key         [%s]", timeout_table->key);
+        dcs_log(0, 0, "first_key   [%s]", timeout_table->first_key);
+        EXEC SQL ROLLBACK;
+        return -1;
+    }
+    EXEC SQL COMMIT;
+    return 1;
+}
+
+
+/*
+   押金缴费成功记录数据库
+*/
+int insert_expenses(char *para, char *inst_code,glob_msg_stru *pub_data_stru) {
+    char buf[30],deposit_no[30],shop_no[20],pos_id[20],trace_no[7],card_no[20],type[2],*p;
+    int len;
+    double amount,sum;
+
+	memset(buf, 0, sizeof(buf));
+	memset(deposit_no, 0, sizeof(deposit_no));
+	memset(shop_no, 0, sizeof(shop_no));
+	memset(pos_id, 0, sizeof(pos_id));
+	memset(trace_no, 0, sizeof(trace_no));
+	memset(card_no, 0, sizeof(card_no));
+	memset(type, 0, sizeof(type));
+	
+	dcs_debug(0, 0, "at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
+    if(strcmp(pub_data_stru->center_result_code,"00") != 0) return 0;
+    
+    len=_get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,0,sizeof(buf)-1);
+    //buf[len]=0x00;
+	dcs_debug(0, 0, "at %s(%s:%d) amount=[%s]",__FUNCTION__,__FILE__,__LINE__,buf);
+    amount= atol(buf);
+    len=_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "RCV_ACCT_NO"),
+                             pub_data_stru->route_msg_type,deposit_no, 2,sizeof(deposit_no)-1);
+    //if(len > 0) deposit_no[len]=0x00;
+    dcs_debug(0, 0, "at %s(%s:%d) deposit_no=[%s]",__FUNCTION__,__FILE__,__LINE__,deposit_no);
+
+    type[0]=deposit_no[0];
+    type[1]=0x00;
+    p=deposit_no+1;
+    if(type[0] !='1' && type[0] !='2' && type[0] !='3' && type[0] !='4') {
+		dcs_log(0, 0, "at %s(%s:%d) Invalid type [%s]",__FUNCTION__,__FILE__,__LINE__,type);
+        return -1;
+    }
+    len=_get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type,
+                             shop_no,0,sizeof(shop_no)-1);
+    //if(len > 0) shop_no[len]=0x00;
+	dcs_debug(0, 0, "at %s(%s:%d) shop_no=[%s]",__FUNCTION__,__FILE__,__LINE__,shop_no);
+    len=_get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type,
+                             pos_id,0,sizeof(pos_id)-1);
+    //if(len > 0) pos_id[len]=0x00;
+	dcs_debug(0, 0, "at %s(%s:%d) pos_id=[%s]",__FUNCTION__,__FILE__,__LINE__,pos_id);
+    len=_get_field_data_safe(pub_data_stru, FIELD_TRA_NO, pub_data_stru->in_msg_type,
+                             trace_no,0,sizeof(trace_no)-1);
+    //if(len > 0) trace_no[len]=0x00;
+	dcs_debug(0, 0, "at %s(%s:%d) trace_no=[%s]",__FUNCTION__,__FILE__,__LINE__,trace_no);
+    len=_get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type,
+                             card_no,0,sizeof(card_no)-1);
+    //if(len > 0) card_no[len]=0x00;
+	dcs_debug(0, 0, "at %s(%s:%d) card_no=[%s]",__FUNCTION__,__FILE__,__LINE__,card_no);
+    exec sql insert into expenses_detail( amount,deposit_no,shop_no,pos_id,trace_no,card_no,type) values (:amount,:p,:shop_no,:pos_id,:trace_no,:card_no,:type);
+    if(sqlca.sqlcode != 0) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, INSERT expenses_detail Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+        return -1;
+    }
+    exec sql commit;
+    exec sql select sum(amount) into :sum from expenses_detail where deposit_no = :p;
+    if(sqlca.sqlcode != 0) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select expenses_detail Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+        return -1;
+    }
+    amount=0;
+    if(type[0] =='1') {
+
+        exec sql select deposit_amount into :amount from DEPOSIT_INFO where deposit_no = :p for update wait 2;
+
+        if(sqlca.sqlcode != 0) {
+			dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select DEPOSIT_INFO Error, deposit_no=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, p);
+            return -1;
+        }
+        if(amount*100 == sum) {
+            exec sql update DEPOSIT_INFO set oper_in='A' , proc_st='2',receivables_type='1',
+            receivables_op_id ='system',receivables_dt=sysdate ,receivables_dw_id='system'
+            where deposit_no = :p and oper_in='I' and proc_st='1';
+            if(sqlca.sqlcode != 0) {
+				dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, update DEPOSIT_INFO Error, deposit_no=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, p);
+                //          return -1;
+            }
+        }
+    } else {
+        exec sql select MONEY into :amount from expense_info where EXPENSE_NO = :p for update wait 2;
+//          and type= :type
+
+        if(sqlca.sqlcode != 0) {
+			dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select expense_info Error, EXPENSE_NO=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, p);
+            return -1;
+        }
+        if(amount*100 == sum) {
+            exec sql update expense_info set oper_in='A' , proc_st='2',RECEIPTED_TYPE='4',
+            RECEIPTED_BY ='system',RECEIPTED_TIME=sysdate,RECEIPTED_DATE=sysdate where EXPENSE_NO = :p and oper_in='I' and proc_st='1';
+            if(sqlca.sqlcode != 0) {
+				dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, update expense_info Error, EXPENSE_NO=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, p);
+            }
+        }
+    }
+    exec sql commit;
+    return 1;
+}

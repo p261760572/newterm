@@ -1,0 +1,62 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <time.h>
+#include <string.h>
+#include "ibdcs.h"
+
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+
+#define  ROLLBACK   0
+#define  COMMIT     1
+
+//EXEC ORACLE OPTION(RELEASE_CURSOR = YES);
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+
+int DasConectDB(void) {
+    char *db_user, *db_pwd;
+
+    dcs_debug(0,0,"<%s>enter DasConectDB",__FUNCTION__);
+    if((db_user = getenv("_DBUSR"))==NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) getevn _DBUSR fail",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+
+    if((db_pwd = getenv("_DBPWD"))==NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) getevn _DBPWD fail",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+
+    EXEC SQL CONNECT :db_user IDENTIFIED BY :db_pwd;
+    if(sqlca.sqlcode != 0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, open db error !",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
+        return -1;
+    }
+
+    return 0;
+}
+
+int DasEnd(int flag) {
+    if(flag) {
+        EXEC SQL COMMIT RELEASE;
+    } else {
+        EXEC SQL ROLLBACK RELEASE;
+    }
+
+    if(sqlca.sqlcode < 0)
+        return sqlca.sqlcode;
+    else
+        return 1;
+}
+
+void rollback(void) {
+    EXEC SQL ROLLBACK;
+}
+
+

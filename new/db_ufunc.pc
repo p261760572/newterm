@@ -1,0 +1,247 @@
+#include "base.h"
+#include "general_util.h"
+#include "tpos.h"
+#include "var.h"
+#include <string.h>
+#include <stdio.h>
+#include "ibdcs.h"
+#include "db_tools.h"
+
+
+/*
+  flag: 0,在交易异常或系统异常情况下更新流水表的标识
+        1,转接交易情况下更新流水表的标识
+        2,交易处理结束，正常返回受理节点的标识
+*/
+EXEC SQL INCLUDE sqlca;
+EXEC ORACLE OPTION(RELEASE_CURSOR = YES);
+int db_update(glob_msg_stru *pub_data_stru,int flag)
+{
+	char handle[20 + 1], para[100 + 1];
+	int i;
+	ICS_DEBUG(0);
+	EXEC SQL SELECT HANDLE, PARA INTO :handle, :para FROM DB_UPDATE_SET WHERE (APP_TYPE = :pub_data_stru->app_type or app_type='*') AND STEP = :pub_data_stru->route_num;
+	if(sqlca.sqlcode)
+	{
+		dcs_log(0, 0, "<DB_UFUNC.PC:DB_UPDATE>SELECT DB_UPDATE_SET, APP_TYPE[%s], STEP[%d]  Error.\n[sqlCode:%d]errmsg:\n----------\n%s\n", pub_data_stru->app_type, pub_data_stru->route_num, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
+		return -1;
+	}
+	rtrim(handle);
+	rtrim(para);
+	for(i = 0; gl_update_db[i].handle != NULL; i++)
+	{
+		if(strcmp(gl_update_db[i].handle, handle) == 0)
+		{
+			if(flag)
+				return gl_update_db[i].func(para, flag, pub_data_stru);
+			else
+				return gl_update_db[i].func_ret(para, flag, pub_data_stru);
+		}
+	}
+  dcs_log(0, 0, "<FILE:%s,LINE:%d>处理函数[%s]未找到!", __FILE__, __LINE__, handle);
+  return 1;
+}
+
+int update_translog(tl_trans_log_def *pTransLog)
+{
+	ICS_DEBUG(0);
+	rtrim(pTransLog->amount_pay );
+  	rtrim(pTransLog->amount_real);  
+  	rtrim(pTransLog->fee        );  
+  	rtrim(pTransLog->step       );
+	EXEC SQL UPDATE  
+	TRANSLOG
+	SET 
+
+		QS_DATE         = :pTransLog->qs_date         , 
+
+		PAY_INSTI_CODE  = :pTransLog->pay_insti_code  , 
+		APP_INSTI_CODE  = :pTransLog->app_insti_code  , 
+//		ACQ_MSG_TYPE    = :pTransLog->acq_msg_type    , 
+//		ACQ_TRANS_TYPE  = :pTransLog->acq_trans_type  , 
+//		APP_TYPE        = :pTransLog->app_type        , 
+		PAY_MSG_TYPE    = :pTransLog->pay_msg_type    , 
+		PAY_TRANS_TYPE  = :pTransLog->pay_trans_type  , 
+		APP_MSG_TYPE    = :pTransLog->app_msg_type    , 
+		APP_TRANS_TYPE  = :pTransLog->app_trans_type  , 
+		RESP_CD_APP     = :pTransLog->resp_cd_app     , 
+		RESP_CD_PAY     = :pTransLog->resp_cd_pay     , 
+		RESP_CD_RCV     = :pTransLog->resp_cd_rcv     , 
+		PAY_ACCT_NO     = :pTransLog->pay_acct_no     , 
+		CARD_ATTR       = :pTransLog->card_attr       , 
+		ISS_INSTI_CODE  = :pTransLog->iss_insti_code  , 
+//		AMOUNT_PAY      = :pTransLog->amount_pay      , 
+		AMOUNT_REAL     = :pTransLog->amount_real     , 
+		FEE             = :pTransLog->fee             , 
+	
+		PAY_TRA_NO      = :pTransLog->pay_tra_no      , 
+		APP_TRA_NO      = :pTransLog->app_tra_no      , 
+	
+//		ACQ_TIME        = :pTransLog->acq_time        , 
+		PAY_DATE        = :pTransLog->pay_date        , 
+		PAY_TIME        = :pTransLog->pay_time        , 
+		APP_DATE        = :pTransLog->app_date        , 
+		APP_TIME        = :pTransLog->app_time        , 
+	
+		PAY_TERM_ID1    = :pTransLog->pay_term_id1    , 
+		PAY_TERM_ID2    = :pTransLog->pay_term_id2    , 
+		APP_TERM_ID1    = :pTransLog->app_term_id1    , 
+		APP_TERM_ID2    = :pTransLog->app_term_id2    , 
+//		ACQ_ADDITION    = :pTransLog->acq_addition    , 
+		PAY_ADDITION    = :pTransLog->pay_addition    , 
+		APP_ADDITION    = :pTransLog->app_addition    , 
+		SYS_REF_NO      = :pTransLog->sys_ref_no      , 
+		POS_ENTRY_MD_CD = :pTransLog->pos_entry_md_cd , 
+		POS_COND_CD     = :pTransLog->pos_cond_cd     , 
+		RCV_ACCT_NO     = :pTransLog->rcv_acct_no     , 
+		TRANS_CURR_CD   = :pTransLog->trans_curr_cd   , 
+		RESP_CD_AUTH_ID = :pTransLog->resp_cd_auth_id , 
+		STEP            = :pTransLog->step            , 
+		VOID_FLAG       = :pTransLog->void_flag          , 
+//		PERMIT_VOID     = :pTransLog->permit_void     ,
+		last_time   = sysdate       
+	WHERE 
+		SYS_DATE = :pTransLog->sys_date AND ACQ_INSTI_CODE = :pTransLog->acq_insti_code AND ACQ_TRA_NO = :pTransLog->acq_tra_no 
+			AND ACQ_DATE = :pTransLog->acq_date AND ACQ_TERM_ID1 = :pTransLog->acq_term_id1 AND ACQ_TERM_ID2 = :pTransLog->acq_term_id2; 
+	if(sqlca.sqlcode)
+	{
+		dcs_log(0, 0, "<update_translog>UPDATE TRANSLOG Error.\n"
+		"SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], ACQ_DATE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s]"
+		"[sqlCode:%d]errmsg:\n----------\n%s\n", 
+		pTransLog->sys_date, pTransLog->acq_insti_code, pTransLog->acq_tra_no, pTransLog->acq_date, pTransLog->acq_term_id1, pTransLog->acq_term_id2,  
+		sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
+		EXEC SQL ROLLBACK;
+		return -1;
+	}        
+	EXEC SQL COMMIT;
+	return 1;
+}
+
+int update_db_voidflag(tl_trans_log_def *log, char flag, char *ret_code)
+{
+	ICS_DEBUG(0);
+//	if(ret_code == NULL)
+		EXEC SQL UPDATE  TRANSLOG	SET VOID_FLAG  = :flag ,last_time   = sysdate where SYS_DATE = :log->sys_date AND ACQ_INSTI_CODE = :log->acq_insti_code AND ACQ_TRA_NO = :log->acq_tra_no 
+			AND ACQ_DATE = :log->acq_date AND ACQ_TERM_ID1 = :log->acq_term_id1 AND ACQ_TERM_ID2 = :log->acq_term_id2; 	
+/*	else
+		EXEC SQL UPDATE  TRANSLOG SET VOID_FLAG  = :flag, RESP_CD_RCV = :ret_code where SYS_DATE = :log->sys_date AND ACQ_INSTI_CODE = :log->acq_insti_code AND ACQ_TRA_NO = :log->acq_tra_no 
+			AND ACQ_DATE = :log->acq_date AND ACQ_TERM_ID1 = :log->acq_term_id1 AND ACQ_TERM_ID2 = :log->acq_term_id2; 	
+*/	if(sqlca.sqlcode)
+	{
+		dcs_log(0, 0, "<update_db_voidflag>UPDATE TRANSLOG Error.\n"
+		"SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], ACQ_DATE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s]"
+		"[sqlCode:%d]errmsg:\n----------\n%s\n", 
+		log->sys_date, log->acq_insti_code, log->acq_tra_no, log->acq_date, log->acq_term_id1, log->acq_term_id2,  
+		sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
+		EXEC SQL ROLLBACK;
+		return -1;
+	}        
+	EXEC SQL COMMIT;
+	return 1;
+}
+
+
+int update_key(char *insti_code, char *mac_key, char *pin_key)
+{
+	ICS_DEBUG(0);
+	EXEC SQL UPDATE INSTI_INFO SET MAC_KEY = :mac_key, PIN_KEY = :pin_key WHERE INSTI_CODE = :insti_code;
+	if(sqlca.sqlcode)
+	{
+		dcs_log(0, 0, "<update_key> UPDATE INSTI_INFO INSTI_CODE=[%s]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", insti_code, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
+		return -1;
+	}
+	EXEC SQL COMMIT;
+	return 1;
+}
+
+int key_reset(glob_msg_stru * pub_data_stru)
+{
+	char tmp[100],buf[64],key[40];
+	
+	tmp[0]=0x00;
+	buf[0]=0x00;
+	dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+	if( 0 >=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "53"),
+																pub_data_stru->in_msg_type,buf,sizeof(buf)))
+	{
+			 dcs_log(0,0,"<%s>get_field_data 53 error",__FUNCTION__);
+			 return -1;
+	}
+	if( buf[1]=='6')
+	{
+		if( 0 >=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"),
+																	pub_data_stru->in_msg_type,tmp,sizeof(tmp)))
+		{	 
+			dcs_log(0,0,"<%s>get_field_data 48 error",__FUNCTION__);
+			return -1;
+	  }
+  }
+  else
+  {
+  	if( 0 >=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "96"),
+  																pub_data_stru->in_msg_type,tmp,sizeof(tmp)))
+		{	 
+			dcs_log(0,0,"<%s>get_field_data 96 error",__FUNCTION__);
+			return -1;
+	  }
+  }
+	
+	if( buf[1]=='6')
+		bcd_to_asc((unsigned char *)key,(unsigned char *)tmp+2,32,0);
+	else
+	{
+		bcd_to_asc((unsigned char *)key,(unsigned char *)tmp,16,0);
+		bcd_to_asc((unsigned char *)key+16,(unsigned char *)tmp,16,0);
+	}
+		key[32]=0x00;
+	if( buf[0]=='1')
+			exec sql update INSTI_INFO set pin_key= :key where insti_code = :pub_data_stru->insti_code;
+	else if( buf[0]=='2')
+			exec sql update INSTI_INFO set mac_key= :key where insti_code = :pub_data_stru->insti_code;
+  else 
+  {	strcpy(pub_data_stru->center_result_code,"30"); return 1;}
+  if ( sqlca.sqlcode !=0)
+  {
+		dcs_log(0, 0, "<%s> UPDATE INSTI_INFO INSTI_CODE=[%s] error!\n %s",__FUNCTION__, pub_data_stru->insti_code, sqlca.sqlerrm.sqlerrmc); 
+		strcpy(pub_data_stru->center_result_code,"96");
+		return 1;
+	}
+	exec sql commit;
+	strcpy(pub_data_stru->center_result_code,"00");
+	dcs_debug(0,0,"<%s> end",__FUNCTION__);
+	return 1;
+}
+
+int update_db_result_pay(tl_trans_log_def *log,char *ret_code)
+{
+	ICS_DEBUG(0);
+	
+	EXEC SQL UPDATE  TRANSLOG SET RESP_CD_PAY = :ret_code,qs_date = :log->qs_date,last_time   = sysdate  where SYS_DATE = :log->sys_date AND ACQ_INSTI_CODE = :log->acq_insti_code AND ACQ_TRA_NO = :log->acq_tra_no 
+			AND ACQ_DATE = :log->acq_date AND ACQ_TERM_ID1 = :log->acq_term_id1 AND ACQ_TERM_ID2 = :log->acq_term_id2; 	
+	if(sqlca.sqlcode)
+	{
+		dcs_log(0, 0, "<%s>UPDATE TRANSLOG Error.\n"
+		"SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], ACQ_DATE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s]"
+		"[sqlCode:%d]errmsg:\n----------\n%s\n", __FUNCTION__,
+		log->sys_date, log->acq_insti_code, log->acq_tra_no, log->acq_date, log->acq_term_id1, log->acq_term_id2,  
+		sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
+		EXEC SQL ROLLBACK;
+		return -1;
+	}        
+	EXEC SQL COMMIT;
+	return 1;
+}
+int insti_update_work_key(char * insti_code, char *pin_key, char *mac_key, char *cd_key)
+{
+
+	exec sql update INSTI_INFO set pin_key= :pin_key, mac_key= :mac_key , data_key=:cd_key 
+		 where insti_code = :insti_code;
+  if ( sqlca.sqlcode !=0)
+  {
+		dcs_log(0, 0, "<%s> UPDATE INSTI_INFO INSTI_CODE=[%s] error!\n %s",__FUNCTION__,insti_code, sqlca.sqlerrm.sqlerrmc); 
+		return -1;
+	}
+	exec sql commit;
+	dcs_debug(0,0,"<%s> end",__FUNCTION__);
+	return 1;
+}

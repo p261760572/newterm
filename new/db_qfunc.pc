@@ -1,0 +1,3128 @@
+#include "base.h"
+#include "var.h"
+#include "general_util.h"
+#include "ic.h"
+#include "tpos.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "ibdcs.h"
+#include "tools.h"
+#include "db_qfunc.h"
+#include "db_tools.h"
+
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+
+/**
+获取当前进入报文的重要信息域字段集合，机构号等域
+**/
+int get_insti_field_name(glob_msg_stru *pub_data_stru,char *field_name,int size) {
+    char msg_type[5];
+    char insti_name[40];
+
+    memset(field_name, 0, size);
+    get_in_msg_type(pub_data_stru,msg_type,sizeof(msg_type));
+
+    EXEC SQL select insti_field into :insti_name from pkg_insti_field
+              where msg_type = :msg_type;
+    if(sqlca.sqlcode == 1403) return 0;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select insti_field error, msg_type=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, msg_type);
+        return -1;
+    }
+    rtrim(insti_name);
+    return snprintf(field_name,size,"%s",insti_name);
+}
+
+//确定报文所对应的业务品种
+int confirm_app_type(glob_msg_stru *pub_data_stru) {
+    char tmp_buf1[128+1],tmp_buf2[128],type[2];
+    char app_type[5],trans_type[5],open_flag[2],permit_void[2];
+
+    exec sql select  key_id into :tmp_buf1 from app_type_def where
+             msg_type =:pub_data_stru->in_msg_type;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select app_type_def error, msg_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type);
+        return -1;
+    }
+    rtrim(tmp_buf1);
+    pack_key(tmp_buf2, sizeof(tmp_buf2), tmp_buf1, pub_data_stru,
+             pub_data_stru->in_msg_type, 0, 0);
+
+    if(strlen(tmp_buf2) >0) {
+        memset(app_type,0,sizeof(app_type));
+        memset(trans_type,0,sizeof(trans_type));
+        memset(open_flag,0,sizeof(open_flag));
+        memset(type,0,sizeof(type));
+        exec sql select app_type,open_flag ,trans_type,type,permit_void into
+                 :app_type,:open_flag,:trans_type,:type,:permit_void from app_type
+                   where msg_type= :pub_data_stru->in_msg_type and app_key=:tmp_buf2;
+        if(sqlca.sqlcode !=0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select app_type error, msg_type=[%s] app_key=[%s]",
+                    __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type,tmp_buf2);
+            return -1;
+        }
+        strcpy_s(pub_data_stru->app_type, app_type, sizeof(pub_data_stru->app_type));
+        strcpy_s(pub_data_stru->in_trans_type, trans_type, sizeof(pub_data_stru->in_trans_type));
+        pub_data_stru->open_flag=open_flag[0]-0x30;     //业务是否打开
+        pub_data_stru->permit_void=permit_void[0]-0x30; //该业务是否允许冲正
+        dcs_debug(0, 0, "at %s(%s:%d) msg_type=[%s] app_type=%s,trans_type=%s,permit_void=[%c]",
+                  __FUNCTION__,__FILE__,__LINE__,pub_data_stru->in_msg_type,app_type,trans_type, permit_void[0]);
+    } else {
+        dcs_log(0, 0, "at %s(%s:%d) key_id is null",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+// 确定该交易的基本流程，是否需要做转接处理
+    if(type[0]==0x30)  // 走直接应答处理
+        return 0;
+    else
+        return 1;
+
+}
+//获取路由机构代码(需要从数据库中获取的)
+int _get_route_insti_code(glob_msg_stru *pub_data_stru) {
+    return -1;
+}
+
+int end_proc(glob_msg_stru *pub_data_stru) {
+    int i;
+    char proc_name[40 + 1];
+    char acq_code[40 + 1];
+    ICS_DEBUG(0);
+    memset(acq_code,0,sizeof(acq_code));
+    if(0 > _get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type,
+                                acq_code, 0,sizeof(acq_code)-1)) return -1;
+    if(0 > E2E(pub_data_stru->insti_code, acq_code, pub_data_stru->center_result_code, 5)) return -1;
+    EXEC SQL SELECT PROC_NAME INTO :proc_name FROM END_PROC WHERE MSG_TYPE = :pub_data_stru->in_msg_type and TRANS_TYPE = :pub_data_stru->in_trans_type;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, can not found proc function from end_proc table msg_type=%s,trans_type=%s",
+                __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type,pub_data_stru->in_trans_type);
+        return 0;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select END_PROC table error msg_type=%s,trans_type=%s",
+                __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type,pub_data_stru->in_trans_type);
+        return 0;
+    }
+    rtrim(proc_name);
+    for(i = 0; gl_end_proc[i].func != NULL; i++) {
+        if(strcmp(gl_end_proc[i].name, proc_name) == 0) {
+            gl_end_proc[i].func(pub_data_stru);
+//              return -1;
+//          else
+            dcs_debug(0, 0, "at %s(%s:%d) trans_type=[%s]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->in_trans_type);
+
+            return 0;
+        }
+    }
+
+    dcs_debug(0, 0, "at %s(%s:%d) END_PROC[%s]",__FUNCTION__,__FILE__,__LINE__,proc_name);
+    return 0;
+}
+
+//为0时直接返回0
+
+
+// 检查业务限制
+int check_app_limit(glob_msg_stru *pub_data_stru) {
+    char name[80+1];
+    char para[100 + 1],tmsg_type[5],ttrans_type[5],tapp_type[5];
+    int i,result;
+    ICS_DEBUG(0);
+    strcpy_s(tmsg_type,pub_data_stru->in_msg_type,sizeof(tmsg_type));
+    strcpy_s(ttrans_type,pub_data_stru->in_trans_type,sizeof(ttrans_type));
+    strcpy_s(tapp_type,pub_data_stru->app_type,sizeof(tapp_type));
+
+    exec sql declare check_app_limit cursor for
+             select proc_name, para from app_limit where msg_type = :tmsg_type and ((app_type=:tapp_type
+                    and trans_type = :ttrans_type) or (app_type='*' and trans_type='*')) and used='1' order by seq asc;
+    exec sql open check_app_limit;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN CHECK_APP_LIMIT CURSOR, MSG_TYPE[%s], APP_TYPE[%s], trans_type[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->app_type, pub_data_stru->in_trans_type);
+        strcpy_s(pub_data_stru->center_result_code, CODE_SYSTEM_ERR, sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    for(;;) {
+        exec sql fetch check_app_limit into :name, :para;
+        if(sqlca.sqlcode ==1403) {
+            break;
+        } else if(sqlca.sqlcode ==0) {
+            rtrim(name);
+            rtrim(para);
+            dcs_debug(0,0,"at %s(%s:%d), proc [%s]", __FUNCTION__,__FILE__,__LINE__,name);
+            for(i=0; gl_check_limit[i].func!=NULL; i++) {
+//              dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <check_app_limit> gl_check_limit[i]=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,gl_check_limit[i].handle);
+                if(strcmp(gl_check_limit[i].handle, name)==0) {
+                    dcs_debug(0,0,"at %s(%s:%d), begin [%s]",__FUNCTION__,__FILE__,__LINE__,name);
+                    result= gl_check_limit[i].func(para, 0, pub_data_stru);
+                    if(result <0) {
+                        EXEC SQL CLOSE CHECK_APP_LIMIT;
+                        dcs_log(0,0,"at %s(%s:%d), func[%s] fail! ",
+                                __FUNCTION__,__FILE__,__LINE__,name);
+                        return -1;
+                    } else break;
+                }
+            }
+            if(gl_check_limit[i].func ==NULL) {
+                EXEC SQL CLOSE CHECK_APP_LIMIT;
+                dcs_log(0,0,"at %s(%s:%d), can not found process [%s] funcation!",
+                        __FUNCTION__,__FILE__,__LINE__,name);
+                return -1;
+            }
+            if(result == 0) {
+                EXEC SQL CLOSE CHECK_APP_LIMIT;
+                return 0;
+            }
+        } else {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH CHECK_APP_LIMIT CURSOR, MSG_TYPE[%s], APP_TYPE[%s], trans_type[%s]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->app_type, pub_data_stru->in_trans_type);
+            strcpy_s(pub_data_stru->center_result_code, CODE_SYSTEM_ERR, sizeof(pub_data_stru->center_result_code));
+            EXEC SQL CLOSE CHECK_APP_LIMIT;
+            return -1;
+        }
+    }
+    EXEC SQL CLOSE CHECK_APP_LIMIT;
+    return 1;
+}
+//获取下一路由机构
+/*
+int get_next_insti(glob_msg_stru *pub_data_stru)
+{
+    return -1;
+}
+*/
+
+//获取系统支持的报文种类总计
+int get_msgtype_total() {
+    int num;
+    ICS_DEBUG(0);
+    exec sql select count(*) into :num from (select unique msg_type from priv_def);
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select priv_def error",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    return num;
+}
+// 装载系统所有支持的报文类型数据域定义到内存
+int load_priv_def() {
+    int i,s;
+    int id,max_len,d_max_len;
+    char msg_type[5],name[40+1],len_type[2],is_compress[2],d_len_type[2],d_is_compress[2];
+    int num;
+    ICS_DEBUG(0);
+
+    memset(name,0,sizeof(name));
+    memset(msg_type,0,sizeof(msg_type));
+    memset(len_type,0,sizeof(len_type));
+    memset(is_compress,0,sizeof(is_compress));
+
+    exec sql declare priv_group_total cursor for
+         select * from(  select msg_type ,count(*)  from priv_def group by msg_type) order by msg_type asc;
+    exec sql open priv_group_total;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, open priv_def_num cursor !\n ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), open priv_def_num cursor succ!",__FUNCTION__,__FILE__,__LINE__);
+
+    i=0;
+    while(1) {
+        exec sql fetch priv_group_total into :msg_type,:num;
+        if(sqlca.sqlcode == 1403) {
+            break;
+        } else if(sqlca.sqlcode != 0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, fetch priv_def_num cursor !\n ",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            exec sql close  priv_group_total;
+            return -1;
+        } else {
+//                dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, fetch result i=%d,msg_type=[%s]num[%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,i,msg_type,num);
+
+            rtrim(msg_type);
+            snprintf(gl_def_set.priv_def[i].msg_type,sizeof(gl_def_set.priv_def[i].msg_type),"%s",msg_type);
+//                dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, strcpy msgtype succ!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            gl_def_set.priv_def[i].fld_def= malloc(sizeof(field_define)*num);
+            if(gl_def_set.priv_def[i].fld_def == NULL) {
+                dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, malloc fld_def fail!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+                exec sql close  priv_group_total;
+                return -1;
+            }
+            memset(&gl_def_set.priv_def[i].fld_def[0],0,sizeof(field_define)*num);
+//                dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <load_priv_def>malloc priv_def[%d] fld_def succ!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,i);
+            gl_def_set.priv_def[i].use_num=num;
+            i++;
+        }
+    }
+    exec sql close  priv_group_total;
+
+    exec sql declare priv_detail cursor for
+        select msg_type,id,name,is_compress,len_type,max_len ,d_is_compress,d_len_type,d_max_len from priv_def order by msg_type asc;
+    exec sql open priv_detail;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, open priv_def cursor",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        exec sql close  priv_detail;
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), open priv_detail cursor succ!",__FUNCTION__,__FILE__,__LINE__);
+    i=0;
+    s=0;
+    while(1) {
+        exec sql fetch priv_detail into :msg_type,:id,:name,:is_compress,:len_type,:max_len,:d_is_compress,:d_len_type,:d_max_len;
+        if(sqlca.sqlcode == 1403) {
+            break;
+        } else if(sqlca.sqlcode != 0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, fetch priv_detail cursor",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            exec sql close  priv_detail;
+            return -1;
+        }
+        if(memcmp(msg_type,gl_def_set.priv_def[i].msg_type,4)!=0) {
+            s=0;
+            i++;
+        }
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, begin put value i=%d,s=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,i,s);
+        gl_def_set.priv_def[i].fld_def[s].id=id;
+        rtrim(name);
+        snprintf(gl_def_set.priv_def[i].fld_def[s].name,sizeof(gl_def_set.priv_def[i].fld_def[s].name),"%s",name);
+        gl_def_set.priv_def[i].fld_def[s].is_compress=is_compress[0]-0x30;
+        gl_def_set.priv_def[i].fld_def[s].len_type=len_type[0]-0x30;
+        gl_def_set.priv_def[i].fld_def[s].max_len=max_len;
+        gl_def_set.priv_def[i].fld_def[s].d_is_compress=d_is_compress[0]-0x30;
+        gl_def_set.priv_def[i].fld_def[s].d_len_type=d_len_type[0]-0x30;
+        gl_def_set.priv_def[i].fld_def[s].d_max_len=d_max_len;
+//          dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, msg_type=%s\n i=%d,s=%d \n id=%d \n name=%s \niscompress=%d\n len_type=%d\n max_len=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,msg_type,i,s,gl_def_set.priv_def[i].fld_def[s].id,
+//          gl_def_set.priv_def[i].fld_def[s].name,gl_def_set.priv_def[i].fld_def[s].is_compress,
+//          gl_def_set.priv_def[i].fld_def[s].len_type,gl_def_set.priv_def[i].fld_def[s].max_len);
+        s++;
+    }
+
+    exec sql close  priv_detail;
+
+    return 1;
+}
+
+//获取机构信息
+int get_insti_info(glob_msg_stru * pub_data_stru) {
+    char mac_index[6],mac_key[33],pin_index[6],pin_key[33],fold_name[40];
+    char data_index[6],data_key[33], is_check_mac[2],link_type[2],work_type[2],open_flag[2];
+
+    exec sql select  mac_index,mac_key,pin_index,pin_key,data_index,data_key,
+         is_check_mac,link_type,work_type,open_flag,fold_name
+          into :mac_index,:mac_key,:pin_index,:pin_key,:data_index,:data_key,
+          :is_check_mac,:link_type,:work_type,:open_flag ,:fold_name
+         from insti_info where insti_code = :pub_data_stru->insti_code;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select insti_info table error ! insti_code=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->insti_code);
+        return -1;
+    }
+    rtrim(mac_index);
+    rtrim(mac_key);
+    rtrim(pin_index);
+    rtrim(pin_index);
+    rtrim(data_index);
+    rtrim(data_key);
+    strcpy_s(pub_data_stru->in_mac_index,mac_index,sizeof(pub_data_stru->in_mac_index));
+    strcpy_s(pub_data_stru->in_mac_key,mac_key,sizeof(pub_data_stru->in_mac_key));
+    strcpy_s(pub_data_stru->in_pin_index,pin_index,sizeof(pub_data_stru->in_pin_index));
+    strcpy_s(pub_data_stru->in_pin_key,pin_key,sizeof(pub_data_stru->in_pin_key));
+    strcpy_s(pub_data_stru->in_data_index,data_index,sizeof(pub_data_stru->in_data_index));
+    strcpy_s(pub_data_stru->in_data_key,data_key,sizeof(pub_data_stru->in_data_key));
+    pub_data_stru->is_check_mac=is_check_mac[0]-0x30;
+    pub_data_stru->insti_open_flag=open_flag[0]-0x30;
+    pub_data_stru->insti_work_type=work_type[0]-0x30;
+    pub_data_stru->insti_link_type=link_type[0]-0x30;
+    return 1;
+}
+
+/**
+根据fold 名字获取对应机构代码
+**/
+int folder_to_insti_code(char * fold_name,char *insti_code,int size) {
+    char tmp[10];
+    ICS_DEBUG(0);
+
+    exec sql select insti_code into :tmp from insti_info where fold_name=:fold_name;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select insti_info table error ! fold_name=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,gs_fold_name);
+        return -1;
+    }
+    rtrim(tmp);
+    return snprintf(insti_code,size,"%s",tmp);
+}
+
+int get_msg_key(glob_msg_stru * pub_data_stru) {
+    char field_id_set[100+1],tmp[60];
+    int offset=0,n,id;
+    char *p=NULL;
+
+    exec sql select field_id_set into :field_id_set  from msg_key
+        where msg_type= :pub_data_stru->in_msg_type;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select msg_key table error ! msg_type=[%s]\n[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->in_msg_type);
+        return -1;
+    }
+    rtrim(field_id_set);
+
+    for(p=my_split(field_id_set,',',tmp,sizeof(tmp)),offset=0;
+        p; p=my_split(p,',',tmp,sizeof(tmp))) {
+        pub_data_stru->filed_key_num++;
+        if(pub_data_stru->filed_key_num >5) {
+            dcs_log(0,0,"at %s(%s:%d), key_num > 5, system abnormal!",__FUNCTION__,__FILE__,__LINE__);
+            return -1;
+        }
+        id=get_pub_field_id(pub_data_stru->in_msg_type,tmp);
+        pub_data_stru->filed_key_field_id[pub_data_stru->filed_key_num]=id;
+        n=get_field_data_safe(pub_data_stru,id,pub_data_stru->in_msg_type,tmp,sizeof(tmp));
+        if(0>n) n=0;
+        snprintf(pub_data_stru->msg_key+offset,60-offset,"%s",tmp);
+        offset=offset+n;
+        if(offset >=60) {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, 关键字缓冲区溢出! offset=%d",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,offset);
+            return -1;
+        }
+    }
+    return 1;
+}
+/*
+  1、根据路由机构代码第一种选择方式;
+  2、未找到则根据路由机构报文类型选择走具体的交易。
+*/
+int get_route_trans_info(glob_msg_stru * pub_data_stru) {
+    int i;
+    ICS_DEBUG(0);
+    i= get_trans_info_from_insticode(pub_data_stru);
+
+    if(i <0) return -1;
+    if(i >0) return i;
+    return get_trans_info_from_msg(pub_data_stru);
+
+}
+
+int get_trans_info_from_insticode(glob_msg_stru * pub_data_stru) {
+    char out_trans_type[5];
+    int step_type, timeout=0;
+    char timeout_flag[1 + 1];
+    ICS_DEBUG(0);
+
+    exec sql select out_trans_type ,step_type, timeout_flag, TIMEOUT into :out_trans_type, :step_type, :timeout_flag, :timeout from trans_from_code where app_type=:pub_data_stru->app_type
+              and step =:pub_data_stru->route_num and insti_code = :pub_data_stru->route_insti_code;
+    if(sqlca.sqlcode == 1403) return 0;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select trans_from_code table error ! app_type=[%s], step[%d], insti_code[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num, pub_data_stru->route_insti_code);
+        return -1;
+    }
+    strcpy_s(pub_data_stru->route_trans_type, out_trans_type, sizeof(pub_data_stru->route_trans_type));
+    strcpy_s(pub_data_stru->timeout_table.flag, timeout_flag, sizeof(pub_data_stru->timeout_table.flag));
+    pub_data_stru->timeout = timeout;
+    pub_data_stru->step_type=step_type;//判断是支付渠道，还是应用渠道
+    return 1;
+}
+
+int get_trans_info_from_msg(glob_msg_stru * pub_data_stru) {
+    char out_trans_type[5];
+    char timeout_flag[1 + 1];
+    int step_type, timeout=0;
+    ICS_DEBUG(0);
+    exec sql select out_trans_type,step_type, timeout_flag, TIMEOUT into :out_trans_type,:step_type, :timeout_flag, :timeout from trans_from_msg
+        where msg_type = :pub_data_stru->route_msg_type and app_type=:pub_data_stru->app_type
+          and step =:pub_data_stru->route_num;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select trans_from_msg table error ! app_type=[%s], step[%d], msg_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num, pub_data_stru->route_msg_type);
+        return -1;
+    }
+    strcpy_s(pub_data_stru->route_trans_type, out_trans_type, sizeof(pub_data_stru->route_trans_type));
+    strcpy_s(pub_data_stru->timeout_table.flag, timeout_flag, sizeof(pub_data_stru->timeout_table.flag));
+    pub_data_stru->timeout = timeout;
+    pub_data_stru->step_type=step_type;//判断是支付渠道，还是应用渠道
+    return 1;
+}
+
+
+//根据业务类型与交易类型直接获取的路由机构
+int get_easy_route(glob_msg_stru * pub_data_stru) {
+    char insti_code[11 + 1]; //默认路由机构
+    char insti_code_bak[11 + 1]; //备份路由机构
+    char flag [1 + 1]; //0：关闭，1：默认路由机构，2：备份路由机构
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT INSTI_CODE, INSTI_CODE_BAK, FLAG INTO :insti_code, :insti_code_bak, :flag FROM EASY_ROUTE
+       WHERE APP_TYPE = :pub_data_stru->app_type AND STEP = :pub_data_stru->route_num;
+//  if(sqlca.sqlcode == 1403)return 0;
+    if(sqlca.sqlcode != 0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT EASY_ROUTE, APP_TYPE[%s], STEP[%d] Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num);
+        return -1;
+    }
+    rtrim(insti_code);
+    rtrim(insti_code_bak);
+    switch(flag[0]) {
+        case '1':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code, sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code_bak[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code_bak, sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        case '2':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code_bak, sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code, sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        case '3':
+            if(!pub_data_stru->req_flag) {
+                _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
+                                     pub_data_stru->in_msg_type, pub_data_stru->route_insti_code, 2,8);
+                _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
+                                     pub_data_stru->in_msg_type, pub_data_stru->route_trans_type, 2,4);
+            } else {
+                strcpy_s(pub_data_stru->route_insti_code, pub_data_stru->insti_code, sizeof(pub_data_stru->route_insti_code));
+                strcpy_s(pub_data_stru->route_trans_type, pub_data_stru->in_trans_type, sizeof(pub_data_stru->route_trans_type));
+            }
+            pub_data_stru->switch_src_flag=1;
+            break;
+        default:
+            return 0;
+    }
+    return 1;
+}
+
+
+//根据终端信息获取的路由机构
+int get_terminal_route(glob_msg_stru * pub_data_stru) {
+    char insti_code[11 + 1]; //默认路由机构
+    char insti_code_bak[11 + 1]; //备份路由机构
+    char flag [1 + 1]; //0：关闭，1：默认路由机构，2：备份路由机构
+    char term_class[2 + 1]; //终端信息类型
+    char route_no[30 + 1];
+    int ret;
+    ICS_DEBUG(0);
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> begin ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+    memset(term_class,0,sizeof(term_class));
+    if(0 >= (ret = get_terminal_class(term_class, pub_data_stru)))
+        return ret;
+    if(0 > get_route_no(route_no, pub_data_stru)) {
+        dcs_log(0,0,"at %s(%s:%d), get_route_no fail! ",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> procing 1",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+    EXEC SQL SELECT INSTI_CODE, INSTI_CODE_BAK, FLAG
+    INTO :insti_code, :insti_code_bak, :flag
+    FROM TERM_ROUTE WHERE TERM_CLASS = :term_class;
+    if(sqlca.sqlcode == 1403) return 0;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TERM_ROUTE, TERM_CLASS[%s] Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,term_class);
+        return -1;
+    }
+    rtrim(insti_code);
+    rtrim(insti_code_bak);
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> procing 2 ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+    switch(flag[0]) {
+        case '1':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code, sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code_bak[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code_bak, sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        case '2':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code_bak, sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code, sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        default:
+            return 0;
+    }
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> end ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+    return 1;
+}
+
+//根据业务类型，步骤确定路由号码
+int get_route_no(char *route_no, glob_msg_stru * pub_data_stru) {
+    char route_field_name[40 + 1];
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT route_field_name INTO :route_field_name FROM ROUTE_STEP_FIELD WHERE APP_TYPE = :pub_data_stru->app_type AND STEP =  :pub_data_stru->route_num;
+    if(sqlca.sqlcode == 1403) {
+        get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, route_no,20);
+        return 1;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT ROUTE_STEP_FIELD, app_type[%s], STEP[%d]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num);
+        return -1;
+    }
+    if(pub_data_stru->req_flag)
+        return get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, route_field_name),
+                                   pub_data_stru->in_msg_type, route_no,20);
+    else
+        return _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, route_field_name),
+                                    pub_data_stru->route_msg_type, route_no, 2,20);
+}
+
+//根据终端信息确定终端类型
+int get_terminal_class(char *t_class, glob_msg_stru *pub_data_stru) {
+    char term_class[2 + 1]; //终端信息类型
+    char term_id1[20 + 1], term_id2[20 + 1];
+    ICS_DEBUG(0);
+    memset(term_id1, 0, sizeof(term_id1));
+    memset(term_id2, 0, sizeof(term_id2));
+    memset(term_class,0,sizeof(term_class));
+    if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,16))
+        get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id1,16);
+//  get_field_data(FIELD_TERM_ID2, pub_data_stru, term_id2);
+
+    EXEC SQL SELECT TERM_CLASS INTO :term_class FROM TERM_ROUTE_CLASS WHERE TERM_ID1= :term_id1 AND APP_TYPE = :pub_data_stru->app_type;
+    if(sqlca.sqlcode == 1403) return 0;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TERM_ROUTE_CLASS, TERM_ID1[%s],app_type[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, term_id1,pub_data_stru->app_type);
+        return -1;
+    }
+    strcpy(t_class,term_class);
+    dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, end class=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,t_class);
+    return 1;
+}
+
+//根据卡bin获取的路由机构
+int get_bin_route(glob_msg_stru * pub_data_stru) {
+    char insti_code[11 + 1]; //默认路由机构
+    char insti_code_bak[11 + 1]; //备份路由机构
+    char flag [1 + 1]; //0：关闭，1：默认路由机构，2：备份路由机构
+    char route_no[30 + 1];
+    ICS_DEBUG(0);
+    memset(route_no,0,sizeof(route_no));
+    if(0 > get_route_no(route_no, pub_data_stru))
+        return -1;
+
+    EXEC SQL SELECT INSTI_CODE, INSTI_CODE_BAK, FLAG
+    INTO :insti_code, :insti_code_bak, :flag
+    FROM
+    (
+       SELECT INSTI_CODE, INSTI_CODE_BAK, FLAG
+       FROM BIN_ROUTE
+       WHERE :route_no LIKE TRIM(ROUTE_BIN) || '%'  AND NO_LEN = LENGTH(TRIM(:route_no))
+       ORDER BY LENGTH(ROUTE_BIN) DESC
+    )
+    WHERE ROWNUM = 1;
+    if(sqlca.sqlcode == 1403) return 0;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT BIN_ROUTE, route_no[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, route_no);
+        return -1;
+    }
+    rtrim(insti_code);
+    rtrim(insti_code_bak);
+    switch(flag[0]) {
+        case '1':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code,sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code_bak[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code_bak,sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        case '2':
+            strcpy_s(pub_data_stru->route_insti_code, insti_code_bak,sizeof(pub_data_stru->route_insti_code));
+            if(0 > get_route_insti_info(pub_data_stru))
+                return -1;
+            if(0 > check_route_insti(pub_data_stru)) {
+                if(insti_code[0])
+                    strcpy_s(pub_data_stru->route_insti_code, insti_code,sizeof(pub_data_stru->route_insti_code));
+                else
+                    return -1;
+                if(0 > get_route_insti_info(pub_data_stru))
+                    return -1;
+                if(0 > check_route_insti(pub_data_stru))
+                    return -1;
+            }
+            break;
+        default:
+            return 0;
+    }
+    return 1;
+}
+
+int get_route_trans_set(glob_msg_stru * pub_data_stru) {
+    char field_msg[512 + 1],field_sys[512 + 1],field_db[512 + 1],*p,c,tmp[64];
+    int i, j,field_id,n=0;
+    ICS_DEBUG(0);
+    memset(field_msg,0,sizeof(field_msg));
+    memset(field_sys,0,sizeof(field_sys));
+    memset(field_db,0,sizeof(field_db));
+
+    if(strcmp(pub_data_stru->route_msg_type,"TPOS") ==0) {
+        dcs_debug(0,0,"at %s(%s:%d), center ret_code=%s",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->center_result_code);
+        if(memcmp(pub_data_stru->center_result_code,"00000",strlen(pub_data_stru->center_result_code))==0)
+            c=0x31;
+        else
+            c=0x30;
+
+        EXEC SQL SELECT FIELD_MSG, FIELD_SYS, FIELD_DB
+        INTO :field_msg, :field_sys, :field_db
+        FROM TPOS_TRANS_SET
+        WHERE MSG_TYPE = :pub_data_stru->route_msg_type AND trans_type=:pub_data_stru->route_trans_type AND flag =:c;
+    } else {
+        EXEC SQL SELECT FIELD_MSG, FIELD_SYS, FIELD_DB
+        INTO :field_msg, :field_sys, :field_db
+        FROM TRANS_SET
+        WHERE MSG_TYPE = :pub_data_stru->route_msg_type AND trans_type=:pub_data_stru->route_trans_type AND STEP = :pub_data_stru->route_num;
+    }
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT trans_set Error.msg_type=[%s],trans_type=[%s], STEP[%d]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_msg_type, pub_data_stru->route_trans_type, pub_data_stru->route_num);
+        return -1;
+    }
+
+    rtrim(field_msg);
+    rtrim(field_sys);
+    rtrim(field_db);
+    p=my_split(field_sys,',',tmp,sizeof(tmp));
+
+    for(i = 0; p!=NULL; i++) {
+        pub_data_stru->route_set.field.field_id[i] = get_pub_field_id(pub_data_stru->route_msg_type,tmp);
+        if(pub_data_stru->route_set.field.field_id[i] <0) {
+            dcs_log(0,0,"at %s(%s:%d), field_id[%s]-[%s] error!",
+                    __FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type, tmp);
+            return -1;
+        }
+        snprintf(pub_data_stru->route_set.field.field_name[i],sizeof(pub_data_stru->route_set.field.field_name[i]),"%s",tmp);
+        pub_data_stru->route_set.field.from[i] = 1;
+        //pub_data_stru->route_set.field.indx[i] = i;
+        p=my_split(p,',',tmp,sizeof(tmp));
+
+    }
+    if(i <= 0) {
+        dcs_log(0,0,"at %s(%s:%d), field_sys error!msg_type=[%s],trans_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type, pub_data_stru->route_trans_type);
+    }
+
+    pub_data_stru->route_set.num = i;
+    p=my_split(field_msg,',',tmp,sizeof(tmp));
+    for(i=0; p!=NULL; i++) {
+        field_id= get_pub_field_id(pub_data_stru->route_msg_type,tmp);
+        if(field_id <0) {
+            dcs_log(0,0,"at %s(%s:%d), field[%s]-[%s] error!",
+                    __FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type, tmp);
+            return -1;
+        }
+
+        for(j = 0; j < pub_data_stru->route_set.num; j++) {
+            if(pub_data_stru->route_set.field.field_id[j] == field_id &&
+               strcmp(pub_data_stru->route_set.field.field_name[j],tmp)==0) {
+                //pub_data_stru->route_set.field.from[j] = 0;
+                n = _get_field_data_safe(pub_data_stru,field_id, pub_data_stru->in_msg_type, 
+			                      	tmp, 0,sizeof(tmp));
+			                      	
+				add_pub_field(pub_data_stru,field_id,pub_data_stru->route_msg_type,n,tmp, 1);
+                break;
+            }
+        }
+
+        if(j >= pub_data_stru->route_set.num) {
+            dcs_log(0,0,"at %s(%s:%d), field[%s]未在field_sys中设置!",__FUNCTION__,__FILE__,__LINE__, p);
+            return -1;
+        }
+        p=my_split(p,',',tmp,sizeof(tmp));
+    }
+// TPOS 消息 设置下行的功能代码
+    if(strcmp(pub_data_stru->route_msg_type,"TPOS") ==0) {
+        char tmp[4];
+        if(0>=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
+                                  pub_data_stru->route_msg_type,tmp,sizeof(tmp)-1))
+            add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
+                          pub_data_stru->route_msg_type, strlen(field_db),field_db,1);
+        else
+            update_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
+                             pub_data_stru->route_msg_type, strlen(field_db),field_db,0);
+
+    }
+    dcs_debug(0,0,"at %s(%s:%d), work_type=%d ,is_check_mac=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_insti_work_type,pub_data_stru->route_is_check_mac);
+// 终端模式获取路由终端密钥
+    if(pub_data_stru->req_flag!=1 && pub_data_stru->route_is_check_mac && pub_data_stru->route_insti_work_type) { //获取终端模式密钥
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> 8",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+        for(i=0; gl_terminfo_qproc[i].name !=NULL; i++) {
+            dcs_debug(0,0,"at %s(%s:%d) , <%s> 8 %d",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,i);
+            if(strcmp(pub_data_stru->route_msg_type,gl_terminfo_qproc[i].name)==0)
+                return gl_terminfo_qproc[i].func(pub_data_stru);
+        }
+        dcs_log(0,0,"at %s(%s:%d), can not found terminfo proc msg_type=%s",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_msg_type);
+        return -1;
+    } else if(pub_data_stru->req_flag ==1 && pub_data_stru->switch_src_flag==1 && pub_data_stru->route_insti_work_type) {
+//     dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> 9",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+        dcs_debug(0,0,"at %s(%s:%d), tmp_order[0]=%02x",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->tmp_order[0]);
+        if(pub_data_stru->tmp_order[0]!= 0x31) { //请求报文直接应答获取终端密钥方式
+            memcpy(pub_data_stru->route_mac_index,pub_data_stru->in_mac_index,6);
+            memcpy(pub_data_stru->route_mac_key,pub_data_stru->in_mac_key,33);
+            dcs_debug(0,0,"at %s(%s:%d), route_mac_key=%s",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_mac_key);
+        } else {
+            for(i=0; gl_terminfo_qproc[i].name !=NULL; i++) {
+                if(strcmp(pub_data_stru->route_msg_type,gl_terminfo_qproc[i].name)==0)
+                    return gl_terminfo_qproc[i].func(pub_data_stru);
+            }
+            dcs_log(0,0,"at %s(%s:%d), can not found terminfo proc msg_type=%s",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type);
+        }
+//     dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> end",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+        return 1;
+    }
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> end",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+    return 1;
+}
+
+int get_iso_para(const char *msg_type, int *head_flag, int *head_len, int *msgid_flag, int *bitmap_flag, int *len_type) {
+    int headflag, headlen, msgidflag, bitmapflag, lentype;
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT HEAD_FLAG,HEAD_LEN,MSGID_FLAG,BITMAP_FLAG,LEN_TYPE
+    INTO :headflag,:headlen,:msgidflag,:bitmapflag,:lentype
+    FROM ISO_PARA WHERE MSG_TYPE = :msg_type;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select iso_para table error !\n msg_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,msg_type);
+        return -1;
+    }
+    *head_flag = headflag;
+    *head_len = headlen;
+    *msgid_flag = msgidflag;
+    *bitmap_flag = bitmapflag;
+    *len_type = lentype;
+    return 1;
+}
+
+int get_msg_intout_flag(glob_msg_stru * pub_data_stru) {
+    char field_id_set[100+1],tmp[64],str[128];
+    int offset=0,n,forward;
+
+    char *p=NULL;
+    memset(field_id_set,0,sizeof(field_id_set));
+
+    exec sql select field_id_set into :field_id_set  from msg_forward_set
+               where msg_type= :pub_data_stru->in_msg_type;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select msg_forward_set table error ! msg_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type);
+        return -1;
+    }
+    rtrim(field_id_set);
+
+    for(p=my_split(field_id_set,',',tmp,sizeof(tmp)),offset=0;
+        p; p=my_split(p,',',tmp,sizeof(tmp))) {
+        n=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,tmp),
+                              pub_data_stru->in_msg_type,tmp,sizeof(tmp));
+        if(n<0) n=0;
+        if(offset+n >=60) {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, 关键字缓冲区溢出! offset=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,offset+n);
+            return -1;
+        }
+        snprintf(str+offset,sizeof(str)-offset,"%s",tmp);
+        offset=offset+n;
+    }
+    exec sql select forward into :forward from msg_forward where
+              msg_type= :pub_data_stru->in_msg_type and key=:str;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select msg_forward table error ! msg_type=[%s],key=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type,str);
+        return -1;
+    }
+    if(forward == 0)
+        pub_data_stru->req_flag=1;
+    return forward;
+}
+
+//直接应答交易检查
+int check_direct_limit(glob_msg_stru *pub_data_stru) {
+    char name[40+1],tapp_type[5],tmsg_type[5];
+    int i,result;
+    ICS_DEBUG(0);
+    strcpy_s(tapp_type,pub_data_stru->app_type,sizeof(tapp_type));
+    strcpy_s(tmsg_type,pub_data_stru->in_msg_type,sizeof(tmsg_type));
+
+    exec sql declare check_direct_limit cursor for
+             select proc_name from direct_limit where msg_type = :tmsg_type and app_type=:tapp_type and used='1'
+                     order by seq asc;
+    exec sql open check_direct_limit;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select direct_proc table error !\n msg_type=[%s],app_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type,pub_data_stru->app_type);
+        return -1;
+    }
+
+    for(;;) {
+        exec sql fetch check_direct_limit into :name;
+        if(sqlca.sqlcode ==1403) {
+            break;
+        } else if(sqlca.sqlcode ==0) {
+            rtrim(name);
+            for(i=0; gl_direct_limit[i].func!=NULL; i++)
+                if(strcmp(gl_direct_limit[i].name,name)==0) {
+                    dcs_debug(0,0,"at %s(%s:%d), name=[%s] begin",__FUNCTION__,__FILE__,__LINE__,name);
+                    result= gl_direct_limit[i].func(pub_data_stru);
+                    if(result <0) {
+                        dcs_log(0,0,"at %s(%s:%d), func[%s] proc fail!",__FUNCTION__,__FILE__,__LINE__,name);
+                        exec sql close check_direct_limit;
+                        return -1;
+                    }
+                    dcs_debug(0,0,"at %s(%s:%d), <%s> name=[%s] succ",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,name);
+                }
+        } else {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, fetch check_direct_limit cursor error !\n msg_type=[%s],app_type=[%s]",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type,pub_data_stru->app_type);
+            exec sql close check_direct_limit;
+            return -1;
+        }
+
+    }
+    exec sql close check_direct_limit;
+
+    dcs_debug(0,0,"at %s(%s:%d), proc succ!",__FUNCTION__,__FILE__,__LINE__);
+
+    return 1;
+}
+
+
+int get_direct_name(const char *msg_type,const char *app_type,char *name,int size) {
+    char tmp[41];
+
+    exec sql select func_name into :tmp from direct_proc where
+           msg_type=:msg_type and app_type=:app_type;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select direct_proc table error ! msg_type=[%s],app_type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,msg_type,app_type);
+        return -1;
+    }
+    rtrim(tmp);
+    strcpy_s(name, tmp, size);
+    return 1;
+}
+
+//db_qfunc.pc
+//从原交易DEFAULT中取值
+//para: 对应TRANS_FIELD_DEFAULT-FIELD_NAME
+int get_default(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char data[256 + 1], trans_type[4 + 1];
+    rtrim(para);
+
+    _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "PAY_TRANS_TYPE"),
+                         DB_MSG_TYPE, trans_type, 2,4);
+    //if(len >0)trans_type[len]=0x00;
+
+    EXEC SQL SELECT DATA INTO :data FROM TRANS_FIELD_DEFAULT
+       WHERE MSG_TYPE = :pub_data_stru->route_msg_type AND TRANS_TYPE = :trans_type AND FIELD_NAME = :para;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANS_FIELD_DEFAULT, MSG_TYPE[%s], TRANS_TYPE[%s], FIELD_NAME[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_msg_type, trans_type, para);
+        return -1;
+    }
+    rtrim(data);
+    add_pub_field(pub_data_stru, fldid, pub_data_stru->in_msg_type, strlen(data), data, 1);
+    return 1;
+}
+
+int route_proc(glob_msg_stru *pub_data_stru) {
+    char handle[40 + 1];
+    int i, ret;
+
+    if(pub_data_stru->is_route == 3)  //使用原始交易路由节点
+        return 1;
+
+    EXEC SQL SELECT HANDLE INTO :handle FROM ROUTE_PROC_SET
+       WHERE APP_TYPE = :pub_data_stru->app_type and STEP = :pub_data_stru->route_num;
+    if(sqlca.sqlcode == 1403)
+        return 0;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d,  select ROUTE_PROC_SET, Error!APP_TYPE=[%s],STEP=[%d]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->app_type, pub_data_stru->route_num);
+        return -1;
+    }
+    rtrim(handle);
+    for(i = 0; gl_route_proc[i].func != NULL; i++) {
+        if(strcmp(gl_route_proc[i].name, handle) == 0) {
+            if(0 >= (ret = gl_route_proc[i].func(pub_data_stru))) {
+                if(0 > ret)dcs_log(0, 0, "at %s(%s:%d), 处理函数[%s]处理失败!",__FUNCTION__,__FILE__,__LINE__, handle);
+                return -1;
+            } else
+                return 1;
+        }
+    }
+    dcs_log(0,0,"at %s(%s:%d), 处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__,handle);
+    return -1;
+}
+
+//通用数据域转换
+int genrate_field_conver(glob_msg_stru *pub_data_stru) {
+    char handle[20 + 1];
+    char para[100 + 1];
+    char field_name[40+1];
+    char out_msg_type[4+1];
+    char *p,tmp[64];
+    ICS_DEBUG(0);
+    memset(handle, 0, sizeof(handle));
+    memset(para, 0, sizeof(para));
+    memset(field_name, 0, sizeof(field_name));
+
+    EXEC SQL SELECT HANDLE, PARA, FIELD_NAME ,out_msg_type into :handle, :para, :field_name,out_msg_type
+    FROM GENRATE_FIELD_CONVER
+    WHERE IN_MSG_TYPE = :pub_data_stru->in_msg_type and out_MSG_TYPE = :pub_data_stru->route_msg_type;
+    if(sqlca.sqlcode == 1403) {
+        EXEC SQL SELECT HANDLE, PARA, FIELD_NAME ,out_msg_type into :handle, :para, :field_name,out_msg_type
+        FROM GENRATE_FIELD_CONVER
+        WHERE IN_MSG_TYPE = :pub_data_stru->in_msg_type and out_MSG_TYPE = '*';
+        if(sqlca.sqlcode == 1403) {
+            EXEC SQL SELECT HANDLE, PARA, FIELD_NAME ,out_msg_type into :handle, :para, :field_name,out_msg_type
+            FROM GENRATE_FIELD_CONVER
+            WHERE OUT_MSG_TYPE = :pub_data_stru->route_msg_type and IN_MSG_TYPE = '*';
+            if(sqlca.sqlcode == 1403) {
+                EXEC SQL SELECT HANDLE, PARA, FIELD_NAME ,out_msg_type into :handle, :para, :field_name,out_msg_type
+                FROM GENRATE_FIELD_CONVER
+                WHERE OUT_MSG_TYPE = '*' and IN_MSG_TYPE = '*';
+                if(sqlca.sqlcode != 0)  {
+                    dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select GENRATE_FIELD_CONVER, Error(*,*)route_msg=[%s],in_msg=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_msg_type, pub_data_stru->in_msg_type);
+                    return -1;
+                }
+            } else if(sqlca.sqlcode != 0) {
+                dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select GENRATE_FIELD_CONVER, Error(in_msg_type=*)",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+                return -1;
+            }
+        } else if(sqlca.sqlcode != 0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select GENRATE_FIELD_CONVER, Error(out_msg_type=*)",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            return -1;
+        }
+    } else if(sqlca.sqlcode != 0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select GENRATE_FIELD_CONVER_CUR, Error",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    rtrim(handle);
+    rtrim(para);
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> 1field_name=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,field_name);
+    rtrim(field_name);
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> 2field_name=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,field_name);
+    p=my_split(field_name, ',',tmp,sizeof(tmp));
+
+    while(p!=NULL) {
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> handle=%s,field_name=%s,id=[%s],p=[%s] ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,handle,field_name,tmp,p);
+        if(0 > genrate_field_conver_handle(handle, para, atoi(tmp), pub_data_stru)) {
+            dcs_log(0, 0, "at %s(%s:%d),genrate_field_conver_handle return Error.\nTRANS_TYPE[%s], ROUTE_TRANS_TYPE[%s], field_name[%s]",
+                    __FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type, pub_data_stru->route_trans_type, field_name);
+            return -1;
+        }
+        p=my_split(p,',',tmp,sizeof(tmp));
+    }
+    return 1;
+}
+
+// 特殊应用数据域转换
+int priv_field_conver(glob_msg_stru * pub_data_stru) {
+    char handle[20 + 1];
+    char para[255 + 1];
+    char field_name[40 + 1];
+    int fldid,i;
+    ICS_DEBUG(0);
+    dcs_debug(0, 0, "at %s(%s:%d), msg_type[%s], trans_type[%s]",__FUNCTION__,__FILE__,__LINE__, pub_data_stru->route_msg_type, pub_data_stru->route_trans_type);
+
+    EXEC SQL DECLARE PRIV_FIELD_CONVER_CUR CURSOR FOR
+    SELECT HANDLE, PARA, FIELD_NAME
+    FROM PRIV_FIELD_CONVER
+    WHERE MSG_TYPE=:pub_data_stru->route_msg_type AND (IN_MSG_TYPE=:pub_data_stru->in_msg_type  or IN_MSG_TYPE='*') AND
+       (TRANS_TYPE = :pub_data_stru->route_trans_type or TRANS_TYPE ='*' ) order by seq;
+    EXEC SQL OPEN PRIV_FIELD_CONVER_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN PRIV_FIELD_CONVER_CUR, TRANS_TYPE[%s], ROUTE_TRANS_TYPE[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_msg_type, pub_data_stru->route_trans_type);
+        return -1;
+    }
+    while(1) {
+        memset(handle, 0, sizeof(handle));
+        memset(para, 0, sizeof(para));
+        memset(field_name, 0, sizeof(field_name));
+        EXEC SQL FETCH PRIV_FIELD_CONVER_CUR INTO :handle, :para, :field_name;
+        if(sqlca.sqlcode == 1403)
+            break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH PRIV_FIELD_CONVER_CUR, TRANS_TYPE[%s], ROUTE_TRANS_TYPE[%s]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_msg_type, pub_data_stru->route_trans_type);
+            EXEC SQL CLOSE PRIV_FIELD_CONVER_CUR;
+            return -1;
+        }
+        rtrim(handle);
+        rtrim(para);
+        rtrim(field_name);
+        if(0 > (fldid = get_pub_field_id(pub_data_stru->route_msg_type, field_name))) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, MSG_TYPE[%s], field_name[%s]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_msg_type, field_name);
+        }
+        dcs_debug(0,0,"at %s(%s:%d), [%s][%s] begin",__FUNCTION__,__FILE__,__LINE__,handle, para);
+        i=priv_field_conver_handle(handle, para, fldid, pub_data_stru);
+        if(0 > i) {
+            EXEC SQL CLOSE PRIV_FIELD_CONVER_CUR;
+            dcs_debug(0,0,"at %s(%s:%d), [%s]err end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle);
+            return -1;
+        } else if(0==i) {
+            dcs_debug(0,0,"at %s(%s:%d), [%s] fault end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle);
+            continue;
+        }
+        dcs_debug(0,0,"at %s(%s:%d), [%s][%s] end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle, para);
+    }
+    EXEC SQL CLOSE PRIV_FIELD_CONVER_CUR;
+    dcs_debug(0,0,"at %s(%s:%d), end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
+}
+
+// 特殊应用数据域转换
+int special_business_handle(glob_msg_stru * pub_data_stru) {
+    char handle[20 + 1];
+    char para[100 + 1];
+    ICS_DEBUG(0);
+
+    EXEC SQL DECLARE SPECIAL_BUSINESS_HANDLE_CUR CURSOR FOR
+    SELECT HANDLE, PARA
+    FROM SPECIAL_BUSINESS_HANDLE
+    WHERE APP_TYPE = :pub_data_stru->app_type AND STEP = :pub_data_stru->route_num;
+    EXEC SQL OPEN SPECIAL_BUSINESS_HANDLE_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SPECIAL_BUSINESS_HANDLE>OPEN SPECIAL_BUSINESS_HANDLE_CUR, APP_TYPE[%s], STEP[%d]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num);
+        return -1;
+    }
+    while(1) {
+        memset(handle, 0, sizeof(handle));
+        memset(para, 0, sizeof(para));
+        EXEC SQL FETCH SPECIAL_BUSINESS_HANDLE_CUR INTO :handle, :para;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SPECIAL_BUSINESS_HANDLE>FETCH SPECIAL_BUSINESS_HANDLE_CUR, APP_TYPE[%s], STEP[%d]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num);
+            EXEC SQL CLOSE SPECIAL_BUSINESS_HANDLE_CUR;
+            return -1;
+        }
+        rtrim(handle);
+        rtrim(para);
+        if(0 > special_business(handle, para, 0, pub_data_stru)) {
+            EXEC SQL CLOSE SPECIAL_BUSINESS_HANDLE_CUR;
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, <%s> handle=[%s] para=[%s] proc fail!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,handle,para);
+            return -1;
+        }
+    }
+    EXEC SQL CLOSE SPECIAL_BUSINESS_HANDLE_CUR;
+    return 1;
+}
+
+//通过交易机构、交易类型和输入附加数据取得交易终端信息，和输出附加数据
+int GetSpecificBusinessPara(char *in_add_data, char *out_add_data, glob_msg_stru * pub_data_stru) {
+    char term_id1[20 + 1];
+    char term_id2[20 + 1];
+    char t_out_add_data[20 + 1];
+    char mcc[4+1];
+    char merch_info[80+1];
+    int l;
+    ICS_DEBUG(0);
+    memset(term_id1,0,sizeof(term_id1));
+    memset(term_id2,0,sizeof(term_id2));
+    memset(t_out_add_data,0,sizeof(t_out_add_data));
+    memset(mcc,0,sizeof(mcc));
+    memset(merch_info,0,sizeof(merch_info));
+
+    EXEC SQL SELECT OUT_ADD_DATA, TERM_ID1, TERM_ID2,mcc,merch_info
+    INTO :t_out_add_data, :term_id1, :term_id2,:mcc,:merch_info
+    FROM SPECIFIC_BUSINESS_PARA
+    WHERE /*IN_ADD_DATA = :in_add_data AND */ ROUTE_TRANS_TYPE = :pub_data_stru->route_trans_type AND ROUTE_INSTI_CODE = :pub_data_stru->route_insti_code and app_type = :pub_data_stru->app_type;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT SPECIFIC_BUSINESS_PARA Error. app_type[%s], ROUTE_TRANS_TYPE[%s], ROUTE_INSTI_CODE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_trans_type, pub_data_stru->route_insti_code);
+        return -1;
+    }
+    rtrim(term_id1);
+    rtrim(term_id2);
+    rtrim(t_out_add_data);
+    rtrim(mcc);
+    rtrim(merch_info);
+//    snprintf(out_add_data, t_out_add_data);
+    if(0 < (l = strlen(term_id1))) {
+        add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, l, term_id1, 1);
+    }
+    if(0 < (l = strlen(term_id2))) {
+        add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, l, term_id2, 1);
+    }
+    if(0 < (l = strlen(mcc))) {
+        add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "MCC"),
+                      DB_MSG_TYPE, l, mcc, 2);
+    }
+    if(0 < (l = strlen(merch_info))) {
+        add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "MERCH_INFO"),
+                      DB_MSG_TYPE,l, merch_info, 2);
+    }
+    return 1;
+}
+
+//通过交易机构、交易类型、上送交易终端信息取得交易终端信息，和输出附加数据
+int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
+    char term_id1[20 + 1];
+    char term_id2[20 + 1];
+    char t_out_add_data[20 + 1];
+    char in_term_id1[20 + 1];
+    char in_term_id2[20 + 1];
+    char mcc[4 + 1];
+    char merch_info[80 + 1];
+    int l, fldid;
+    ICS_DEBUG(0);
+    memset(in_term_id1, 0, sizeof(in_term_id1));
+    memset(in_term_id2, 0, sizeof(in_term_id1));
+    memset(term_id1, 0, sizeof(term_id1));
+    memset(term_id2, 0, sizeof(term_id1));
+    memset(t_out_add_data, 0, sizeof(t_out_add_data));
+    memset(mcc, 0, sizeof(mcc));
+    memset(merch_info, 0, sizeof(merch_info));
+    if(para != NULL) rtrim(para);
+    if(pub_data_stru->route_num > 0) {
+        _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
+                             pub_data_stru->in_msg_type, in_term_id1, 2,17);
+        _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
+                             pub_data_stru->in_msg_type, in_term_id2, 2,17);
+    } else {
+        if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type,
+                                  in_term_id1,sizeof(in_term_id1)-1))
+            get_field_data_safe(pub_data_stru, 20, pub_data_stru->in_msg_type, in_term_id1,17);
+        get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, in_term_id2,sizeof(in_term_id2)-1);
+    }
+    rtrim(in_term_id1);
+    rtrim(in_term_id2);
+    dcs_debug(0,0,"at %s(%s:%d), term_id=[%s],term_id2=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,in_term_id1,in_term_id2);
+    if(in_term_id1[0] == 0) strcpy(in_term_id1, "NULL");
+    if(in_term_id2[0] == 0) strcpy(in_term_id2, "NULL");
+    if(para != NULL && strlen(para) >0) {
+        EXEC SQL SELECT OUT_ADD_DATA, TERM_ID1, TERM_ID2, MERCH_INFO, MCC
+         INTO :t_out_add_data, :term_id1, :term_id2, :merch_info, :mcc
+         FROM GENERAL_BUSINESS_PARA
+         WHERE ROUTE_TRANS_TYPE = :para AND ROUTE_INSTI_CODE = :pub_data_stru->route_insti_code AND IN_TERM_ID1 = :in_term_id1 AND IN_TERM_ID2 = :in_term_id2;
+    } else {
+        EXEC SQL SELECT OUT_ADD_DATA, TERM_ID1, TERM_ID2, MERCH_INFO, MCC
+        INTO :t_out_add_data, :term_id1, :term_id2, :merch_info, :mcc
+        FROM GENERAL_BUSINESS_PARA
+        WHERE ROUTE_TRANS_TYPE = :pub_data_stru->route_trans_type AND ROUTE_INSTI_CODE = :pub_data_stru->route_insti_code AND IN_TERM_ID1 = :in_term_id1 AND IN_TERM_ID2 = :in_term_id2;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT GENERAL_BUSINESS_PARA Error. \nROUTE_TRANS_TYPE[%s], ROUTE_INSTI_CODE[%s], IN_TERM_ID1[%s], IN_TERM_ID2[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_trans_type, pub_data_stru->route_insti_code, in_term_id1, in_term_id2);
+        return -1;
+    }
+    rtrim(term_id1);
+    rtrim(term_id2);
+    rtrim(t_out_add_data);
+    rtrim(merch_info);
+    rtrim(mcc);
+    if(0 < (l = strlen(term_id1))) {
+        add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->route_msg_type, l, term_id1, 1);
+    }
+    if(0 < (l = strlen(term_id2))) {
+        add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->route_msg_type, l, term_id2, 1);
+    }
+    /*
+    if(0 < (l = strlen(t_out_add_data)))
+    {
+        fldid = get_pub_field_id(DB_MSG_TYPE, "T_OUT_A_D");
+        if(fldid < 0)
+        {
+             dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, <%s> get_pub_field_id T_OUT_A_D fail!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+             return -1;
+        }
+        add_pub_field(pub_data_stru, fldid, l, t_out_add_data, 2, NULL);
+    }
+    */
+    if(0 < (l = strlen(mcc))) {
+        fldid = get_pub_field_id(DB_MSG_TYPE, "MCC");
+        if(fldid < 0) {
+            dcs_log(0,0,"at %s(%s:%d), get_pub_field_id MCC fail!",__FUNCTION__,__FILE__,__LINE__);
+            return -1;
+        }
+        add_pub_field(pub_data_stru, fldid, DB_MSG_TYPE, l, mcc, 2);
+    }
+    if(0 < (l = strlen(merch_info))) {
+        fldid = get_pub_field_id(DB_MSG_TYPE, "MERCH_INFO");
+        if(fldid < 0) {
+            dcs_log(0,0,"at %s(%s:%d), get_pub_field_id MERCH_INFO fail!",__FUNCTION__,__FILE__,__LINE__);
+            return -1;
+        }
+        add_pub_field(pub_data_stru, fldid, DB_MSG_TYPE, l, merch_info, 2);
+    }
+    if(0 < (l = strlen(t_out_add_data))) {
+        memcpy(pub_data_stru->route_trans_type,t_out_add_data,4);
+    }
+    return 1;
+}
+
+int mac_calc_handle(int flag, glob_msg_stru * pub_data_stru, char *mac, char *buf, int bufLen) {
+    char handle[20 + 1];
+    char para[200 + 1];
+    char insti_code[11 + 1];
+    int i;
+    ICS_DEBUG(0);
+    memset(handle,0,sizeof(handle));
+    memset(para,0,sizeof(para));
+    memset(insti_code,0,sizeof(insti_code));
+    snprintf(insti_code,9,"%s", flag ? pub_data_stru->route_insti_code : pub_data_stru->insti_code);
+
+    EXEC SQL SELECT PARA, HANDLE
+    INTO :para, :handle
+    FROM MAC_CALC_SET
+    WHERE  INSTI_CODE= :pub_data_stru->route_insti_code;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT MAC_CALC_SET Error. INSTI_CODE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->route_insti_code);
+        return -1;
+    }
+    rtrim(handle);
+    rtrim(para);
+    for(i = 0; gl_mac_calc[i].func != NULL; i++) {
+        if(strcmp(gl_mac_calc[i].handle, handle) == 0)
+            return gl_mac_calc[i].func(para, buf, bufLen, mac, pub_data_stru, flag);
+    }
+    dcs_log(0,0,"at %s(%s:%d), 处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
+    return -1;
+}
+
+//取机构交易流水号
+//para: 第一个参数，流水号位数， 默认为 6 位，最小3位，最大20位
+int get_seq(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    int seq, seqlen;
+    char seqStr[20 + 1], buf[30],tmp[64];
+//    ICS_DEBUG(0);
+    memcpy(tmp,pub_data_stru->route_insti_code,8);
+    tmp[8]=0x00;
+    if(para  == NULL) {
+        dcs_log(0,0,"at %s(%s:%d), para is null!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    seqlen = atoi(para);
+    if(seqlen < 3) seqlen = 6;
+    if(seqlen > 20) seqlen = 20;
+
+    EXEC SQL SELECT INSTI_SEQ INTO :seq FROM INSTI_INFO WHERE INSTI_CODE = :tmp FOR UPDATE;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT INSTI_INFO Error. INSTI_CODE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_insti_code);
+        return -1;
+    }
+    seq++;
+    if(seq > 999999)    seq = 1;
+    snprintf(buf,sizeof(buf), "%%0%dd", seqlen);
+    snprintf(seqStr,sizeof(seqStr), buf, seq);
+    add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type, seqlen, seqStr, 1);
+
+    EXEC SQL UPDATE INSTI_INFO SET INSTI_SEQ = :seq WHERE INSTI_CODE = :tmp;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, UPATE INSTI_INFO.INSTI_SEQ Error. INSTI_CODE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_insti_code);
+        return -1;
+    }
+    EXEC SQL COMMIT;
+    return 1;
+}
+
+//生成交易参考
+int get_ref(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    long ref;
+    char refStr[12 + 1];
+    int seqlen;
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT TRANS_REF INTO :ref FROM SYS_PARA WHERE PARA_ID = 'TRANS_REF' FOR UPDATE;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT SYS_PARA Error. PARA_ID[TRANS_REF]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    ref++;
+    if(ref > 999999999999) ref = 1;
+    seqlen=sprintf(refStr, "%012ld", ref);
+    add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type, seqlen, refStr, 1);
+    EXEC SQL UPDATE SYS_PARA SET TRANS_REF = :ref WHERE PARA_ID = 'TRANS_REF';
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, UPDATE SYS_PARA.TRANS_REF Error. PARA_ID[TRANS_REF]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    EXEC SQL COMMIT;
+    return 1;
+}
+
+
+int confirm_trans_type(glob_msg_stru * pub_data_stru) {
+    char key_id[128 + 1], keyBuf[100 + 1],tmp[6];
+    int type;
+    ICS_DEBUG(0);
+    strcpy_s(tmp,pub_data_stru->in_msg_type,sizeof(tmp));
+
+    EXEC SQL SELECT KEY_ID INTO :key_id FROM APP_TYPE_DEF WHERE MSG_TYPE = :tmp;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT APP_TYPE_DEF Error,MSG_TYPE[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type);
+        return -1;
+    }
+    if(0 > pack_key(keyBuf, sizeof(keyBuf), key_id, pub_data_stru, pub_data_stru->in_msg_type, 0, 0)) return -1;
+//  memcpy(tmp,pub_data_stru->in_msg_type,4);
+//  tmp[4]=0x00;
+    EXEC SQL SELECT TYPE  INTO :type  FROM CONFIRM_TRANS_TYPE WHERE MSG_TYPE = :tmp AND TRANS_KEY = :keyBuf;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT CONFIRM_TRANS_TYPE Error,MSG_TYPE[%s].TRANS_KEY[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->in_msg_type, keyBuf);
+        return -1;
+    }
+
+    return type;
+}
+
+int select_translog(tl_trans_log_def *pTransLog) {
+    tl_trans_log_def TransLog;
+    ICS_DEBUG(0);
+    memcpy(&TransLog, pTransLog, sizeof(tl_trans_log_def));
+    if(TransLog.acq_tra_no[0] == 0) strcpy(TransLog.acq_tra_no, "NULL");
+    if(TransLog.acq_date[0] == 0) strcpy(TransLog.acq_date, "NULL");
+    if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
+    if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
+
+    EXEC SQL SELECT
+       SYS_DATE        ,
+       SYS_TIME        ,
+       QS_DATE         ,
+       ACQ_INSTI_CODE  ,
+       PAY_INSTI_CODE  ,
+       APP_INSTI_CODE  ,
+       ACQ_MSG_TYPE    ,
+       ACQ_TRANS_TYPE  ,
+       APP_TYPE        ,
+       PAY_MSG_TYPE    ,
+       PAY_TRANS_TYPE  ,
+       APP_MSG_TYPE    ,
+       APP_TRANS_TYPE  ,
+       RESP_CD_APP     ,
+       RESP_CD_PAY     ,
+       RESP_CD_RCV     ,
+       PAY_ACCT_NO     ,
+       CARD_ATTR       ,
+       ISS_INSTI_CODE  ,
+       AMOUNT_PAY      ,
+       AMOUNT_REAL     ,
+       FEE             ,
+       ACQ_TRA_NO      ,
+       PAY_TRA_NO      ,
+       APP_TRA_NO      ,
+       ACQ_DATE        ,
+       ACQ_TIME        ,
+       PAY_DATE        ,
+       PAY_TIME        ,
+       APP_DATE        ,
+       APP_TIME        ,
+       ACQ_TERM_ID1    ,
+       ACQ_TERM_ID2    ,
+       PAY_TERM_ID1    ,
+       PAY_TERM_ID2    ,
+       APP_TERM_ID1    ,
+       APP_TERM_ID2    ,
+       ACQ_ADDITION    ,
+       PAY_ADDITION    ,
+       APP_ADDITION    ,
+       SYS_REF_NO      ,
+       POS_ENTRY_MD_CD ,
+       POS_COND_CD     ,
+       RCV_ACCT_NO     ,
+       TRANS_CURR_CD   ,
+       RESP_CD_AUTH_ID ,
+       STEP            ,
+       VOID_FLAG       ,
+       PERMIT_VOID     ,
+       ACQ_CRY_TYPE    ,
+       ACQ_MAC         ,
+       MCC             ,
+       ACQ_PROC_CODE   ,
+       pay_PROC_CODE   ,
+       pay_msg_id   ,
+       MERCH_INFO
+    INTO
+       :TransLog.sys_date        ,
+       :TransLog.sys_time        ,
+       :TransLog.qs_date         ,
+       :TransLog.acq_insti_code  ,
+       :TransLog.pay_insti_code  ,
+       :TransLog.app_insti_code  ,
+       :TransLog.acq_msg_type    ,
+       :TransLog.acq_trans_type  ,
+       :TransLog.app_type        ,
+       :TransLog.pay_msg_type    ,
+       :TransLog.pay_trans_type  ,
+       :TransLog.app_msg_type    ,
+       :TransLog.app_trans_type  ,
+       :TransLog.resp_cd_app     ,
+       :TransLog.resp_cd_pay     ,
+       :TransLog.resp_cd_rcv     ,
+       :TransLog.pay_acct_no     ,
+       :TransLog.card_attr       ,
+       :TransLog.iss_insti_code  ,
+       :TransLog.amount_pay      ,
+       :TransLog.amount_real     ,
+       :TransLog.fee             ,
+       :TransLog.acq_tra_no      ,
+       :TransLog.pay_tra_no      ,
+       :TransLog.app_tra_no      ,
+       :TransLog.acq_date        ,
+       :TransLog.acq_time        ,
+       :TransLog.pay_date        ,
+       :TransLog.pay_time        ,
+       :TransLog.app_date        ,
+       :TransLog.app_time        ,
+       :TransLog.acq_term_id1    ,
+       :TransLog.acq_term_id2    ,
+       :TransLog.pay_term_id1    ,
+       :TransLog.pay_term_id2    ,
+       :TransLog.app_term_id1    ,
+       :TransLog.app_term_id2    ,
+       :TransLog.acq_addition    ,
+       :TransLog.pay_addition    ,
+       :TransLog.app_addition    ,
+       :TransLog.sys_ref_no      ,
+       :TransLog.pos_entry_md_cd ,
+       :TransLog.pos_cond_cd     ,
+       :TransLog.rcv_acct_no     ,
+       :TransLog.trans_curr_cd   ,
+       :TransLog.resp_cd_auth_id ,
+       :TransLog.step            ,
+       :TransLog.void_flag          ,
+       :TransLog.permit_void     ,
+       :TransLog.acq_cry_type    ,
+       :TransLog.acq_mac         ,
+       :TransLog.mcc             ,
+       :TransLog.acq_proc_code   ,
+       :TransLog.pay_proc_code   ,
+       :TransLog.pay_msg_id   ,
+       :TransLog.merch_info
+    FROM TRANSLOG
+    WHERE
+       SYS_DATE = :TransLog.sys_date AND ACQ_INSTI_CODE = :TransLog.acq_insti_code AND ACQ_TRA_NO = :TransLog.acq_tra_no
+        AND /*ACQ_DATE = :TransLog.acq_date AND*/ ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error, SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s],  ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,TransLog.sys_date, TransLog.acq_insti_code, TransLog.acq_tra_no, TransLog.acq_term_id1, TransLog.acq_term_id2);
+        return 0;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error, SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s],  ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, TransLog.sys_date, TransLog.acq_insti_code, TransLog.acq_tra_no, TransLog.acq_term_id1, TransLog.acq_term_id2);
+        return -1;
+    }
+    memcpy(pTransLog, &TransLog, sizeof(tl_trans_log_def));
+    return 1;
+}
+
+int E2E(char *acqinst, char *acqerrcode, char *objerrcode, int size) {
+    char t_acqinst[8 + 1], t_acqerrcode[6 + 1], t_objerrcode[6 + 1];
+    ICS_DEBUG(0);
+    strcpy_s(t_acqinst, acqinst, sizeof(t_acqinst));
+    strcpy_s(t_acqerrcode, acqerrcode, sizeof(t_acqerrcode));
+    memset(t_objerrcode, 0, sizeof(t_objerrcode));
+
+    EXEC SQL SELECT OBJERRCODE INTO :t_objerrcode FROM E2ECODE WHERE ACQINST = :t_acqinst AND ACQERRCODE = :t_acqerrcode;
+    if(sqlca.sqlcode == 1403) {
+        strcpy_safe(objerrcode, acqerrcode, size - 1);
+        return 1;
+    } else if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT OBJERRCODE Error.ACQINST[%s],ACQERRCODE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, t_acqinst, t_acqerrcode);
+        return -1;
+    }
+    rtrim(t_objerrcode);
+    strcpy_s(objerrcode, t_objerrcode, size);
+    return 1;
+}
+
+int check_and_match(glob_msg_stru *pub_data_stru) { //检查应答信息，并与原交易匹配
+    char acq_code[6 + 1];
+    int i, ret;
+    char handle[20 + 1];
+    char para[100 + 1];
+    ICS_DEBUG(0);
+    memset(acq_code,0,sizeof(acq_code));
+    if(0 > _get_field_data_safe(pub_data_stru,FIELD_RECODE, pub_data_stru->in_msg_type,
+                                acq_code, 0,sizeof(acq_code)-1))
+        return -1;
+    if(0 > E2E(pub_data_stru->insti_code, acq_code, pub_data_stru->center_result_code, 5)) return -1;
+    dcs_debug(0,0,"at %s(%s:%d), center ret_code=%s",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->center_result_code);
+
+    EXEC SQL DECLARE CHECK_AND_MATCH_CUR CURSOR FOR
+    SELECT HANDLE, PARA
+    FROM CHECK_AND_MATCH
+    WHERE MSG_TYPE=:pub_data_stru->in_msg_type AND (APP_TYPE = :pub_data_stru->app_type or app_type='*') AND STEP = :pub_data_stru->route_num
+    ORDER BY SEQ;
+    EXEC SQL OPEN CHECK_AND_MATCH_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN CHECK_AND_MATCH_CUR, MSG_TYPE[%s], APP_TYPE[%s], STEP[%d]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type, pub_data_stru->app_type, pub_data_stru->route_num);
+        strcpy_s(pub_data_stru->center_result_code, CODE_SYSTEM_ERR, sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    while(1) {
+        memset(handle, 0, sizeof(handle));
+        memset(para, 0, sizeof(para));
+        EXEC SQL FETCH CHECK_AND_MATCH_CUR INTO :handle, :para;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH CHECK_AND_MATCH_CUR, MSG_TYPE[%s], APP_TYPE[%s], STEP[%d]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->in_msg_type, pub_data_stru->app_type, pub_data_stru->route_num);
+            strcpy_s(pub_data_stru->center_result_code, CODE_SYSTEM_ERR, sizeof(pub_data_stru->center_result_code));
+            EXEC SQL CLOSE CHECK_AND_MATCH_CUR;
+            return -1;
+        }
+        rtrim(handle);
+        rtrim(para);
+        for(i = 0, ret = 1; gl_check_and_match[i].func != NULL; i++) {
+            if(strcmp(gl_check_and_match[i].handle, handle) == 0) {
+                ret = gl_check_and_match[i].func(para, 0, pub_data_stru);
+                if(0 >=ret) {
+                    EXEC SQL CLOSE CHECK_AND_MATCH_CUR;
+                    return ret;
+                }
+                ret = 0;
+                break;
+            }
+        }
+        if(ret) {
+            dcs_log(0,0,"at %s(%s:%d), 处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
+            EXEC SQL CLOSE CHECK_AND_MATCH_CUR;
+            strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
+            return -1;
+        }
+    }
+    EXEC SQL CLOSE CHECK_AND_MATCH_CUR;
+//  if(strcmp(pub_data_stru->center_result_code, "00"))return 0;
+    return 1;
+}
+
+int timeout_handle(glob_msg_stru *pub_data_stru) {
+    char para[100 + 1], handle[20 + 1];
+    int i, flag;
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT HANDLE, PARA INTO :handle, :para FROM TIMEOUT_HANDLE
+       WHERE APP_TYPE = :pub_data_stru->app_type AND STEP = :pub_data_stru->route_num AND FLAG = :pub_data_stru->timeout_table.flag;
+    if(sqlca.sqlcode == 1403) return 1;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TIMEOUT_HANDLE, APP_TYPE[%s], STEP[%d], FLAG[%s] Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type, pub_data_stru->route_num, pub_data_stru->timeout_table.flag);
+        return -1;
+    }
+    rtrim(handle);
+    rtrim(para);
+    flag =  atoi(pub_data_stru->timeout_table.flag);
+    for(i = 0; gl_timeout_handle[i].func != NULL; i++) {
+        if(strcmp(gl_timeout_handle[i].handle, handle) == 0)
+            return gl_timeout_handle[i].func(para, flag, pub_data_stru);
+    }
+    dcs_log(0,0,"at %s(%s:%d), 处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
+    return -1;
+}
+//为报文添加默认值域与数据
+int get_default_field(glob_msg_stru *pub_data_stru) {
+    int field_id;
+    EXEC SQL BEGIN DECLARE SECTION;
+        char data[100+1],field_name[50+1],tmsg_type[5],ttrans_type[5];
+    EXEC SQL END DECLARE SECTION;
+    strcpy_s(tmsg_type,pub_data_stru->route_msg_type,sizeof(tmsg_type));
+    strcpy_s(ttrans_type,pub_data_stru->route_trans_type,sizeof(ttrans_type));
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, msg_type=%s,trans_type=%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_msg_type ,pub_data_stru->route_trans_type);
+
+    exec sql declare field_defualt_cur cursor for
+        select field_name,data from trans_field_default where (msg_type=:tmsg_type and trans_type =:ttrans_type)
+          or (msg_type=:tmsg_type and trans_type ='*');
+    exec sql open field_defualt_cur;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, open field_defualt_cur error!msg_type=%s,trans_type=%s",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_msg_type,pub_data_stru->route_trans_type);
+        return -1;
+    }
+    while(1) {
+        memset(data,0,sizeof(data));
+        memset(field_name,0,sizeof(field_name));
+        exec sql fetch field_defualt_cur into :field_name,:data;
+        if(sqlca.sqlcode == 1403)
+            break;
+        else if(sqlca.sqlcode != 0) {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, fetch field_defualt_cur error!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            exec sql close field_defualt_cur;
+            return -1;
+        }
+        rtrim(data);
+        rtrim(field_name);
+//      dcs_debug(data,strlen(data),"at %s(%s:%d) sqlcode=%d, name[%s][%s][%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,field_name, data, strlen(data));
+        field_id=get_pub_field_id(pub_data_stru->route_msg_type,field_name);
+        add_pub_field(pub_data_stru,field_id,pub_data_stru->route_msg_type, strlen(data),data, 1);
+    }
+    exec sql close field_defualt_cur;
+    return 1;
+}
+
+int db_genrate_query(glob_msg_stru *pub_data_stru) {
+    tl_trans_log_def TransLog;
+    char msgkey[100 + 1], *p,tmp[64];
+    ICS_DEBUG(0);
+
+    memset(&TransLog,0,sizeof(tl_trans_log_def));
+    strcpy_s(msgkey, pub_data_stru->timeout_table.first_key, sizeof(msgkey));
+    //SYS_DATE, ACQ_INSTI_CODE, ACQ_TRA_NO, ACQ_DATE, ACQ_TERM_ID1, ACQ_TERM_ID2
+    rtrim(msgkey);
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> msgkey=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,msgkey);
+    p=my_split(msgkey, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 1[%s]失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,msgkey);
+        return -1;
+    }
+
+    //消息类型
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 2失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+
+    strcpy_s(TransLog.sys_date, tmp, sizeof(TransLog.sys_date));
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 3失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        return -1;
+    }
+
+    strcpy_s(TransLog.acq_insti_code, tmp, sizeof(TransLog.acq_insti_code));
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 4失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        return -1;
+    }
+
+    strcpy_s(TransLog.acq_tra_no, tmp, sizeof(TransLog.acq_tra_no));
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 5失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        return -1;
+    }
+
+    strcpy_s(TransLog.acq_date, tmp, sizeof(TransLog.acq_date));
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 6失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        return -1;
+    }
+    strcpy_s(TransLog.acq_term_id1, tmp, sizeof(TransLog.acq_term_id1));
+    p=my_split(p, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 7失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        return -1;
+    }
+    strcpy_s(TransLog.acq_term_id2, tmp, sizeof(TransLog.acq_term_id2));
+    if(0 >= select_translog(&TransLog)) return -1;
+    snprintf(pub_data_stru->app_type,5,"%s", TransLog.app_type);
+    if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+    pub_data_stru->route_num = atoi(TransLog.step) + 1;
+    if(!pub_data_stru->req_flag) { //应答交易处理流程中 对交易请求时是否国密算法判别
+        if(TransLog.acq_cry_type[0]==0x31) pub_data_stru->out_cry_flag =1;
+    }
+    /*
+    {
+        char tmp[16];
+        memset(tmp,0,sizeof(tmp));
+        _get_field_data_safe(get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), pub_data_stru, tmp, 2,sizeof(tmp)-1);
+    dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> acq_insti_code=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,tmp);
+    }
+    */
+    return 1;
+}
+
+int get_route_insti_info(glob_msg_stru * pub_data_stru) {
+    char mac_index[6],mac_key[33],pin_index[6],pin_key[33],data_index[6],data_key[33], msg_type[4 + 1];
+    char is_check_mac[2],link_type[2],work_type[2],open_flag[2],fold_name[40],cry_type[2],insti_code[10];
+    ICS_DEBUG(0);
+    strcpy_s(insti_code,pub_data_stru->route_insti_code,sizeof(insti_code));
+
+    exec sql select msg_type, mac_index,mac_key,pin_index,pin_key,data_index,data_key,
+         is_check_mac,link_type,work_type,open_flag,fold_name,cry_type into
+         :msg_type, :mac_index,:mac_key,:pin_index,:pin_key,:data_index,:data_key,:is_check_mac,:link_type,:work_type,:open_flag ,:fold_name,:cry_type
+         from insti_info where insti_code = :insti_code;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select insti_info table error !\n insti_code=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_insti_code);
+        return -1;
+    }
+    add_pub_field(pub_data_stru, FIELD_INSTI_CODE, msg_type,
+                  8, pub_data_stru->route_insti_code, 1);
+    add_pub_field(pub_data_stru, FIELD_ACQ_INSTI_CODE, msg_type,
+                  8, pub_data_stru->route_insti_code, 1);
+    rtrim(fold_name);
+    strcpy_s(pub_data_stru->route_msg_type, msg_type, sizeof(pub_data_stru->route_msg_type));
+    if(work_type[0] ==0x30) {
+
+        memcpy(pub_data_stru->route_mac_index,mac_index,5);
+        memcpy(pub_data_stru->route_mac_key,mac_key,32);
+        memcpy(pub_data_stru->route_pin_index,pin_index,5);
+        memcpy(pub_data_stru->route_pin_key,pin_key,32);
+        memcpy(pub_data_stru->route_data_index,data_index,5);
+        memcpy(pub_data_stru->route_data_key,data_key,5);
+    }
+    strcpy_s(pub_data_stru->route_fold_name, fold_name, sizeof(pub_data_stru->route_fold_name));
+    pub_data_stru->route_is_check_mac=is_check_mac[0]-0x30;
+    pub_data_stru->route_insti_open_flag=open_flag[0]-0x30;
+    pub_data_stru->route_insti_work_type=work_type[0]-0x30;
+    pub_data_stru->route_insti_link_type=link_type[0]-0x30;
+    if(cry_type[0] == 0x31) pub_data_stru->out_cry_flag =1;
+//  else pub_data_stru->out_cry_flag =0;
+    dcs_debug(0,0,"at %s(%s:%d), route_pin_index=[%s] work_type=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_pin_index,work_type);
+    return 1;
+}
+
+
+
+#define PAGENUM 50
+int FindICPara(int page, char *buffer) {
+    char aid[38 + 1];
+    int count, len;
+
+    EXEC SQL DECLARE IC_PARA_CUR CURSOR FOR
+    SELECT AID FROM IC_PARA;
+    EXEC SQL OPEN IC_PARA_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN IC_PARA_CUR Error!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    count = 0;
+    len = 1;
+    buffer[0] = page > 0 ? '3' : '1';
+    while(1) {
+        EXEC SQL FETCH IC_PARA_CUR
+        INTO :aid;
+        if(sqlca.sqlcode == 1403)
+            break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH IC_PARA_CUR Error!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            EXEC SQL CLOSE IC_PARA_CUR;
+            return -1;
+        }
+        if(count++ < page * PAGENUM)
+            continue;
+        if(count > (page + 1) * PAGENUM) {
+            buffer[0] = '2';
+            break;
+        }
+        rtrim(aid);
+        asc_to_bcd((unsigned char *)buffer + len, (unsigned char *)aid, strlen(aid), 0);
+        len += strlen(aid)/2;
+    }
+    EXEC SQL CLOSE IC_PARA_CUR;
+    return len;
+}
+
+int FindPubKey(int page, char *buffer) {
+    char rid[10 + 1], rid_index[2 + 1], valid[8 + 1];
+    int count, len;
+
+    EXEC SQL DECLARE PUB_KEY_CUR CURSOR FOR
+    SELECT RID, RID_INDEX, VALID FROM PUB_KEY;
+    EXEC SQL OPEN PUB_KEY_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, <FindPubKey>OPEN PUB_KEY_CUR Error!",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    count = 0;
+    len = 1;
+    buffer[0] = page > 0 ? '3' : '1';
+    while(1) {
+        EXEC SQL FETCH PUB_KEY_CUR
+        INTO :rid, :rid_index, :valid;
+        if(sqlca.sqlcode == 1403)
+            break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, <FindPubKey>FETCH PUB_KEY_CUR Error!",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            EXEC SQL CLOSE IC_PARA_CUR;
+            return -1;
+        }
+        if(count++ < page * PAGENUM)
+            continue;
+        if(count > (page + 1) * PAGENUM) {
+            buffer[0] = '2';
+            break;
+        }
+        rtrim(rid);
+        rtrim(rid_index);
+        rtrim(valid);
+        memcpy(buffer + len, "\x9F\x06\x05", 3);
+        len += 3;
+        asc_to_bcd((unsigned char *)buffer + len, (unsigned char *)rid, 10, 0);
+        len += 5;
+        memcpy(buffer + len,"\x9F\x22\x01", 3);
+        len += 3;
+        asc_to_bcd((unsigned char *)buffer + len, (unsigned char *)rid_index, 2, 0);
+        len += 1;
+        memcpy(buffer + len,"\xDF\x05\x08", 3);
+        len += 3;
+        memcpy(buffer + len, valid, 8);
+        len += 8;
+    }
+    EXEC SQL CLOSE IC_PARA_CUR;
+    return len;
+}
+
+int get_key_info(char *insti_code, char *mac_tek_index, char *mac_tmk_key, char *pin_tek_index, char *pin_tmk_key) {
+    char m_t_i[5 + 1], m_t[32 + 1], p_t_i[5 + 1], p_t[32 + 1];
+    ICS_DEBUG(0);
+
+    EXEC SQL SELECT PIN_TEK_INDEX, PIN_TMK, MAC_TEK_INDEX, MAC_TMK
+       INTO :p_t_i, :p_t, :m_t_i, :m_t
+       FROM INSTI_INFO
+       WHERE INSTI_CODE = :insti_code;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d,  SELECT INSTI_INFO INSTI_CODE=[%s]!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, insti_code);
+        return -1;
+    }
+    snprintf(mac_tek_index,6,"%s", m_t_i);
+    snprintf(pin_tek_index,6,"%s", p_t_i);
+    snprintf(mac_tmk_key,33,"%s", m_t);
+    snprintf(pin_tmk_key,33,"%s", p_t);
+    return 1;
+}
+
+
+int head_proc(char *msg_type,char *buf, int start,int len) {
+    char func_name[40+1];
+    int i;
+    ICS_DEBUG(0);
+
+    exec sql select func_name into :func_name from head_proc where msg_type =:msg_type;
+
+    if(sqlca.sqlcode !=0) {
+//      dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, <%s> SELECT head_proc msg_type=[%s]!\nerrmsg:\n----------\n%s\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,msg_type);
+        return -1;
+    }
+    rtrim(func_name);
+    for(i=0; gl_head_proc[i].func != NULL; i++) {
+        if(!strcmp(func_name,gl_head_proc[i].func_name))
+            return gl_head_proc[i].func(buf,start,len);
+    }
+//  dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, <%s> nout found proc head function msg_type=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,msg_type);
+    return -1;
+}
+
+int get_term_trans_control(char *creditflag, int *credit_card, int *credit_d_a, int *credit_d_c, int *debit_card, int *debit_d_a, int *debit_d_c, glob_msg_stru *pub_data_stru) {
+    char term_id1[20 + 1], term_id2[20 + 1];
+    char credit_flag       [1 + 1] ,tapp_type[5];
+    int credit_card_limit;
+    int credit_d_a_limit;
+    int credit_d_c_limit;
+    int debit_card_limit;
+    int debit_d_a_limit;
+    int debit_d_c_limit;
+
+    memset(term_id1, 0, sizeof(term_id1));
+    memset(term_id2, 0, sizeof(term_id2));
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,sizeof(term_id1)-1);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, term_id2,sizeof(term_id2)-1);
+    if(term_id1[0] == 0) strcpy(term_id1, "NULL");
+    if(term_id2[0] == 0) strcpy(term_id2, "NULL");
+    strcpy_s(tapp_type,pub_data_stru->app_type,sizeof(tapp_type));
+
+    EXEC SQL SELECT
+       CREDIT_FLAG,
+       CREDIT_CARD_LIMIT,
+       CREDIT_D_A_LIMIT ,
+       CREDIT_D_C_LIMIT ,
+       DEBIT_CARD_LIMIT ,
+       DEBIT_D_A_LIMIT  ,
+       DEBIT_D_C_LIMIT
+    INTO
+       :credit_flag,
+       :credit_card_limit,
+       :credit_d_a_limit ,
+       :credit_d_c_limit ,
+       :debit_card_limit ,
+       :debit_d_a_limit  ,
+       :debit_d_c_limit
+    FROM TRANS_CONTROL
+    WHERE
+       TERM_ID1 = :term_id1 AND TERM_ID2 = :term_id2 AND APP_TYPE = :tapp_type;
+    if(sqlca.sqlcode == 1403)
+        return 0;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANS_CONTROL Error. \nTERM_ID1[%s], TERM_ID2[%s], IN_TERM_ID1[%s], IN_TERM_ID2[%s], APP_TYPE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, term_id1, term_id2, pub_data_stru->app_type);
+        return -1;
+    }
+    *creditflag = credit_flag[0];
+    *credit_card = credit_card_limit;
+    *credit_d_a  =  credit_d_a_limit;
+    *credit_d_c  =  credit_d_c_limit;
+    *debit_card  =  debit_card_limit;
+    *debit_d_a   =  debit_d_a_limit ;
+    *debit_d_c   =  debit_d_c_limit ;
+    return 1;
+}
+
+int AddUpTrans(char *cardno, int *amount, int *count, char *app_type, int flag) {
+    int t_amount = 0, t_count = 0;
+
+    if(flag) {
+        EXEC SQL SELECT SUM(AMOUNT_PAY), COUNT(*)
+        INTO :t_amount, t_count
+        FROM TRANSLOG
+        WHERE APP_TYPE  = :app_type AND pay_acct_no = :cardno AND SUBSTR(sys_date, 1, 6) = TO_CHAR(sysdate, 'YYYYMM') AND TRIM(resp_cd_rcv) = substr('000000', 1, LENGTH(TRIM(resp_cd_rcv))) and void_flag='0';
+    } else {
+        EXEC SQL SELECT SUM(AMOUNT_PAY), COUNT(*)
+        INTO :t_amount, t_count
+        FROM TRANSLOG
+        WHERE APP_TYPE  = :app_type AND pay_acct_no = :cardno AND sys_date = TO_CHAR(sysdate, 'YYYYMMDD') AND TRIM(resp_cd_rcv) = substr('000000', 1, LENGTH(TRIM(resp_cd_rcv))) and void_flag='0';
+    }
+    if(sqlca.sqlcode && sqlca.sqlcode != 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.pay_acct_no[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, cardno);
+        return -1;
+    }
+    *count = t_count;
+    *amount = t_amount;
+    return 1;
+}
+
+int GetBank(char *cardNo, char *bankCode, char *cardType) {
+    char cardtype[1 + 1];
+    char bankcode[8 + 1];
+
+    EXEC SQL SELECT BANKCODE, CARDTYPE
+    INTO :bankcode, :cardtype
+    FROM
+       (
+        SELECT BANKCODE, CARDTYPE, CLEN
+        FROM CARDBIN
+        WHERE :cardNo LIKE TRIM(BIN) || '%' AND  CLEN = LENGTH(TRIM(:cardNo))
+        ORDER BY LENGTH(TRIM(BIN)) DESC
+       )
+    WHERE ROWNUM = 1;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, CARDBIN中没有找到CARD[%s]!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, cardNo);
+        bankCode[0] = 0;
+        cardType[0] = '0';
+        return 1;
+    } else if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT CARDBIN Error.cardNo[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, cardNo);
+        return -1;
+    }
+    strcpy(bankCode, bankcode);
+    strcpy(cardType, cardtype);
+    return 1;
+}
+
+int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
+    char trans_type[4 + 1], route_trans_type[4 + 1], app_type[4 + 1], route_msg_type[4 + 1], transflag[1 + 1];
+    int len;
+
+    memset(app_type, 0, sizeof(app_type));
+    memset(route_trans_type, 0, sizeof(route_trans_type));
+    memset(route_msg_type, 0, sizeof(route_msg_type));
+
+    if(0 >(len= _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "APP_TYPE"),
+                                     DB_MSG_TYPE, app_type, 2,4))) {
+        dcs_log(0, 0, "at %s(%s:%d), 取APP_TYPE失败",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    //app_type[len]=0x00;
+    memset(transflag,0,sizeof(transflag));
+    EXEC SQL SELECT TRANS_FLAG INTO :transflag
+        FROM TIMEOUT_TRANS_FLAG
+        WHERE APP_TYPE = :app_type AND TIMEOUT_FLAG = :pub_data_stru->timeout_table.flag;
+    if(sqlca.sqlcode == 1403) {
+        transflag[0] = pub_data_stru->timeout_table.flag[0] == '4' ? '1' : '0';
+    } else if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TIMEOUT_TRANS_FLAG Error.APP_TYPE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, app_type);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), in_msg_type=%s,transflag=[%s],app_type=[%s],timeout->flag=%s",
+              __FUNCTION__,__FILE__,__LINE__,pub_data_stru->in_msg_type,transflag,app_type,pub_data_stru->timeout_table.flag);
+    {
+        if(0 > (len=_get_field_data_safe(pub_data_stru,
+                                         get_pub_field_id(DB_MSG_TYPE,transflag[0] == '1' ?
+                                                 "APP_TRANS_TYPE" : "PAY_TRANS_TYPE"),
+                                         DB_MSG_TYPE, route_trans_type, 2,4))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__,transflag[0] == '1' ? "APP_TRANS_TYPE" : "PAY_TRANS_TYPE");
+            return -1;
+        }
+        //route_trans_type[len]=0x00;
+        if(0 >(len= _get_field_data_safe(pub_data_stru,
+                                         get_pub_field_id(DB_MSG_TYPE, transflag[0] == '1' ?
+                                                 "APP_INSTI_CODE" : "PAY_INSTI_CODE"),
+                                         DB_MSG_TYPE, pub_data_stru->route_insti_code, 2,8))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__,transflag[0] == '1' ? "APP_INSTI_CODE" : "PAY_INSTI_CODE");
+            return -1;
+        }
+        pub_data_stru->route_insti_code[len]=0x00;
+        if(0 >(len= _get_field_data_safe(pub_data_stru,
+                                         get_pub_field_id(DB_MSG_TYPE, transflag[0] == '1' ?
+                                                 "APP_MSG_TYPE" : "PAY_MSG_TYPE"),
+                                         DB_MSG_TYPE, route_msg_type, 2,4))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__, transflag[0] == '1' ? "APP_MSG_TYPE" : "PAY_MSG_TYPE");
+            return -1;
+        }
+        //route_msg_type[len]=0x00;
+    }
+    EXEC SQL SELECT TIMEOUT_TRANS INTO :trans_type
+        FROM TIMEOUT_TRANS_SET
+        WHERE APP_TYPE = :app_type AND ROUTE_TRANS_TYPE = :route_trans_type AND ROUTE_MSG_TYPE = :route_msg_type;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TIMEOUT_TRANS_SET Error.APP_TYPE[%s],ROUTE_TRANS_TYPE[%s],ROUTE_MSG_TYPE[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, app_type, route_trans_type, route_msg_type);
+        return -1;
+    }
+    snprintf(pub_data_stru->route_trans_type,5,"%s", trans_type);
+    return 1;
+}
+
+int get_end_trans(char *para, short flag, glob_msg_stru *pub_data_stru) {
+    tl_trans_log_def TransLog;
+    if(0 > get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "44"),
+                               pub_data_stru->in_msg_type, TransLog.rcv_acct_no,sizeof(TransLog.rcv_acct_no)-1)) {
+        dcs_log(0, 0, "at %s(%s:%d), 取收款数据域[%s]出错！",__FUNCTION__,__FILE__,__LINE__, "44");
+        return -1;
+    }
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,16);
+    if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
+    if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
+
+    EXEC SQL SELECT
+       SYS_DATE        ,
+       SYS_TIME        ,
+       QS_DATE         ,
+       ACQ_INSTI_CODE  ,
+       PAY_INSTI_CODE  ,
+       APP_INSTI_CODE  ,
+       ACQ_MSG_TYPE    ,
+       ACQ_TRANS_TYPE  ,
+       APP_TYPE        ,
+       PAY_MSG_TYPE    ,
+       PAY_TRANS_TYPE  ,
+       APP_MSG_TYPE    ,
+       APP_TRANS_TYPE  ,
+       RESP_CD_APP     ,
+       RESP_CD_PAY     ,
+       RESP_CD_RCV     ,
+       PAY_ACCT_NO     ,
+       CARD_ATTR       ,
+       ISS_INSTI_CODE  ,
+       AMOUNT_PAY      ,
+       AMOUNT_REAL     ,
+       FEE             ,
+       ACQ_TRA_NO      ,
+       PAY_TRA_NO      ,
+       APP_TRA_NO      ,
+       ACQ_DATE        ,
+       ACQ_TIME        ,
+       PAY_DATE        ,
+       PAY_TIME        ,
+       APP_DATE        ,
+       APP_TIME        ,
+       ACQ_TERM_ID1    ,
+       ACQ_TERM_ID2    ,
+       PAY_TERM_ID1    ,
+       PAY_TERM_ID2    ,
+       APP_TERM_ID1    ,
+       APP_TERM_ID2    ,
+       ACQ_ADDITION    ,
+       PAY_ADDITION    ,
+       APP_ADDITION    ,
+       SYS_REF_NO      ,
+       POS_ENTRY_MD_CD ,
+       POS_COND_CD     ,
+       RCV_ACCT_NO     ,
+       TRANS_CURR_CD   ,
+       RESP_CD_AUTH_ID ,
+       STEP            ,
+       VOID_FLAG       ,
+       PERMIT_VOID
+    INTO
+       :TransLog.sys_date        ,
+       :TransLog.sys_time        ,
+       :TransLog.qs_date         ,
+       :TransLog.acq_insti_code  ,
+       :TransLog.pay_insti_code  ,
+       :TransLog.app_insti_code  ,
+       :TransLog.acq_msg_type    ,
+       :TransLog.acq_trans_type  ,
+       :TransLog.app_type        ,
+       :TransLog.pay_msg_type    ,
+       :TransLog.pay_trans_type  ,
+       :TransLog.app_msg_type    ,
+       :TransLog.app_trans_type  ,
+       :TransLog.resp_cd_app     ,
+       :TransLog.resp_cd_pay     ,
+       :TransLog.resp_cd_rcv     ,
+       :TransLog.pay_acct_no     ,
+       :TransLog.card_attr       ,
+       :TransLog.iss_insti_code  ,
+       :TransLog.amount_pay      ,
+       :TransLog.amount_real     ,
+       :TransLog.fee             ,
+       :TransLog.acq_tra_no      ,
+       :TransLog.pay_tra_no      ,
+       :TransLog.app_tra_no      ,
+       :TransLog.acq_date        ,
+       :TransLog.acq_time        ,
+       :TransLog.pay_date        ,
+       :TransLog.pay_time        ,
+       :TransLog.app_date        ,
+       :TransLog.app_time        ,
+       :TransLog.acq_term_id1    ,
+       :TransLog.acq_term_id2    ,
+       :TransLog.pay_term_id1    ,
+       :TransLog.pay_term_id2    ,
+       :TransLog.app_term_id1    ,
+       :TransLog.app_term_id2    ,
+       :TransLog.acq_addition    ,
+       :TransLog.pay_addition    ,
+       :TransLog.app_addition    ,
+       :TransLog.sys_ref_no      ,
+       :TransLog.pos_entry_md_cd ,
+       :TransLog.pos_cond_cd     ,
+       :TransLog.rcv_acct_no     ,
+       :TransLog.trans_curr_cd   ,
+       :TransLog.resp_cd_auth_id ,
+       :TransLog.step            ,
+       :TransLog.void_flag          ,
+       :TransLog.permit_void
+    FROM
+    (
+       SELECT * FROM TRANSLOG
+       WHERE
+        SYS_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD') AND ACQ_INSTI_CODE = :pub_data_stru->insti_code
+        AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
+        AND RCV_ACCT_NO = :TransLog.rcv_acct_no
+       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+    )
+    WHERE ROWNUM = 1;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], RCV_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.rcv_acct_no);
+        strcpy(pub_data_stru->center_result_code, CODE_NOT_EXIST);
+        return -1;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], RCV_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.rcv_acct_no);
+        return -1;
+    }
+    if(memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0') {
+        if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+        return 1;
+    }
+    if(TransLog.void_flag[0] == '0') {
+        strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    strcpy_s(pub_data_stru->center_result_code, CODE_TRANS_ERR, sizeof(pub_data_stru->center_result_code));
+    return -1;
+}
+
+int end_trans(glob_msg_stru *pub_data_stru) {
+    tl_trans_log_def TransLog;
+    if(0 > get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "44"),
+                               pub_data_stru->in_msg_type, TransLog.pay_acct_no,sizeof(TransLog.pay_acct_no)-1)) {
+        dcs_log(0, 0, "at %s(%s:%d), 取付款数据域[%s]出错！",__FUNCTION__,__FILE__,__LINE__, "44");
+        return -1;
+    }
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,16);
+    if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
+    if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
+
+    EXEC SQL SELECT
+       SYS_DATE        ,
+       SYS_TIME        ,
+       QS_DATE         ,
+       ACQ_INSTI_CODE  ,
+       PAY_INSTI_CODE  ,
+       APP_INSTI_CODE  ,
+       ACQ_MSG_TYPE    ,
+       ACQ_TRANS_TYPE  ,
+       APP_TYPE        ,
+       PAY_MSG_TYPE    ,
+       PAY_TRANS_TYPE  ,
+       APP_MSG_TYPE    ,
+       APP_TRANS_TYPE  ,
+       RESP_CD_APP     ,
+       RESP_CD_PAY     ,
+       RESP_CD_RCV     ,
+       PAY_ACCT_NO     ,
+       CARD_ATTR       ,
+       ISS_INSTI_CODE  ,
+       AMOUNT_PAY      ,
+       AMOUNT_REAL     ,
+       FEE             ,
+       ACQ_TRA_NO      ,
+       PAY_TRA_NO      ,
+       APP_TRA_NO      ,
+       ACQ_DATE        ,
+       ACQ_TIME        ,
+       PAY_DATE        ,
+       PAY_TIME        ,
+       APP_DATE        ,
+       APP_TIME        ,
+       ACQ_TERM_ID1    ,
+       ACQ_TERM_ID2    ,
+       PAY_TERM_ID1    ,
+       PAY_TERM_ID2    ,
+       APP_TERM_ID1    ,
+       APP_TERM_ID2    ,
+       ACQ_ADDITION    ,
+       PAY_ADDITION    ,
+       APP_ADDITION    ,
+       SYS_REF_NO      ,
+       POS_ENTRY_MD_CD ,
+       POS_COND_CD     ,
+       RCV_ACCT_NO     ,
+       TRANS_CURR_CD   ,
+       RESP_CD_AUTH_ID ,
+       STEP            ,
+       VOID_FLAG       ,
+       PERMIT_VOID
+    INTO
+       :TransLog.sys_date        ,
+       :TransLog.sys_time        ,
+       :TransLog.qs_date         ,
+       :TransLog.acq_insti_code  ,
+       :TransLog.pay_insti_code  ,
+       :TransLog.app_insti_code  ,
+       :TransLog.acq_msg_type    ,
+       :TransLog.acq_trans_type  ,
+       :TransLog.app_type        ,
+       :TransLog.pay_msg_type    ,
+       :TransLog.pay_trans_type  ,
+       :TransLog.app_msg_type    ,
+       :TransLog.app_trans_type  ,
+       :TransLog.resp_cd_app     ,
+       :TransLog.resp_cd_pay     ,
+       :TransLog.resp_cd_rcv     ,
+       :TransLog.pay_acct_no     ,
+       :TransLog.card_attr       ,
+       :TransLog.iss_insti_code  ,
+       :TransLog.amount_pay      ,
+       :TransLog.amount_real     ,
+       :TransLog.fee             ,
+       :TransLog.acq_tra_no      ,
+       :TransLog.pay_tra_no      ,
+       :TransLog.app_tra_no      ,
+       :TransLog.acq_date        ,
+       :TransLog.acq_time        ,
+       :TransLog.pay_date        ,
+       :TransLog.pay_time        ,
+       :TransLog.app_date        ,
+       :TransLog.app_time        ,
+       :TransLog.acq_term_id1    ,
+       :TransLog.acq_term_id2    ,
+       :TransLog.pay_term_id1    ,
+       :TransLog.pay_term_id2    ,
+       :TransLog.app_term_id1    ,
+       :TransLog.app_term_id2    ,
+       :TransLog.acq_addition    ,
+       :TransLog.pay_addition    ,
+       :TransLog.app_addition    ,
+       :TransLog.sys_ref_no      ,
+       :TransLog.pos_entry_md_cd ,
+       :TransLog.pos_cond_cd     ,
+       :TransLog.rcv_acct_no     ,
+       :TransLog.trans_curr_cd   ,
+       :TransLog.resp_cd_auth_id ,
+       :TransLog.step            ,
+       :TransLog.void_flag          ,
+       :TransLog.permit_void
+    FROM
+    (
+       SELECT * FROM TRANSLOG
+       WHERE
+        SYS_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD') AND ACQ_INSTI_CODE = :pub_data_stru->insti_code
+        AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
+        AND PAY_ACCT_NO = :TransLog.pay_acct_no
+       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+    )
+    WHERE ROWNUM = 1;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], PAY_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
+        strcpy_s(pub_data_stru->center_result_code, CODE_NOT_EXIST, sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], PAY_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
+        return -1;
+    }
+    if(memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0') {
+        if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+        return 1;
+    }
+    if(TransLog.void_flag[0] == '0') {
+        strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    strcpy_s(pub_data_stru->center_result_code, CODE_TRANS_ERR, sizeof(pub_data_stru->center_result_code));
+    return -1;
+}
+
+//关闭游标
+//增加根据数PRIV_DEF配置是否为压缩数据 20140910
+int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
+    char dbmg_fld[40 + 1], data_fld[40 + 1];
+    int data_from;
+    int d_fldid, s_fldid, fldid, ret;
+    char fieldVal[512 + 1], addData[512 + 1], *p, fieldAsc[512  + 1];
+    field_define    *fld_def;
+    message_define *priv_def;
+
+    EXEC SQL DECLARE SAVE_ADDIDATA_CUR CURSOR FOR
+    SELECT
+       DBMG_FLD,
+       DATA_FLAG,
+       DATA_FROM,
+       DATA_FLD
+    FROM
+       SAVE_ADDIDATA
+    WHERE
+       MSG_TYPE = :pub_data_stru->in_msg_type   AND
+       DATA_FLAG = :data_flag AND
+       (APP_TYPE = :pub_data_stru->app_type OR APP_TYPE = '*');
+    EXEC SQL OPEN SAVE_ADDIDATA_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN SAVE_ADDIDATA_CUR, MSG_TYPE[%s], APP_TYPE[%s]  Error",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->app_type);
+        return -1;
+    }
+    priv_def = match_priv_stru(DB_MSG_TYPE, &gl_def_set);
+    while(1) {
+        memset(dbmg_fld, 0, sizeof(dbmg_fld));
+        memset(data_fld, 0, sizeof(data_fld));
+        data_flag = 0;
+        data_from = 0;
+        EXEC SQL FETCH SAVE_ADDIDATA_CUR INTO :dbmg_fld, :data_flag, :data_from, :data_fld;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH SAVE_ADDIDATA_CUR, MSG_TYPE[%s], APP_TYPE[%s]  Error",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->in_msg_type, pub_data_stru->app_type);
+            EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+            return -1;
+        }
+        rtrim(dbmg_fld);
+        rtrim(data_fld);
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> dbmg_fld=%s,data_fld=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,dbmg_fld,data_fld);
+        if(0 > (d_fldid = get_pub_field_id(DB_MSG_TYPE, dbmg_fld))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]-[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__,__FILE__, __LINE__, DB_MSG_TYPE, dbmg_fld);
+            EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+            return -1;
+        }
+        fld_def = get_priv_field_def_for_id(d_fldid, priv_def);
+        if(fld_def == NULL) {
+            dcs_log(0, 0, "at %s(%s:%d), get_priv_field_def_for_id[%s:%d]失败！",__FUNCTION__,__FILE__,__LINE__,__FILE__, __LINE__, dbmg_fld, d_fldid);
+            return -1;
+        }
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> dbmg_flg=[%s],data_flg=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,dbmg_fld,data_fld);
+        switch(data_flag) {
+            case 1:
+                s_fldid = get_pub_field_id(DB_MSG_TYPE, "PAY_ADDITION");
+                if(s_fldid < 0) {
+                    dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__, "PAY_ADDITION");
+                    EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+                    return -1;
+                }
+                break;
+            case 2:
+                s_fldid = get_pub_field_id(DB_MSG_TYPE, "APP_ADDITION");
+                if(s_fldid < 0) {
+                    dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__,"APP_ADDITION");
+                    EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+                    return -1;
+                }
+                break;
+            default:
+                s_fldid = get_pub_field_id(DB_MSG_TYPE, "ACQ_ADDITION");
+                if(s_fldid < 0) {
+                    dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__, "ACQ_ADDITION");
+                    EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+                    return -1;
+                }
+                break;
+        }
+        switch(data_from) {
+            case 1:
+                p = pub_data_stru->route_msg_type;
+                break;
+            case 2:
+                p = DB_MSG_TYPE;
+                break;
+            default:
+                p = pub_data_stru->in_msg_type;
+                break;
+        }
+        if(0 > (fldid = get_pub_field_id(p, data_fld))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取[%s][%s]ID失败！",__FUNCTION__,__FILE__,__LINE__, p, data_fld);
+            EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+            return -1;
+        }
+        ret = _get_field_data_safe(pub_data_stru, fldid, p, fieldVal, data_from,sizeof(fieldVal)-1);
+        if(0 > ret) {
+            dcs_debug(0,0,"at %s(%s:%d), get_field_data[%d] no data ,from=%d",__FUNCTION__,__FILE__,__LINE__,fldid,data_from);
+            continue;
+        }
+        //fieldVal[ret]=0x00;
+        if(fld_def->is_compress) {
+            bcd_to_asc((unsigned char *)fieldAsc, (unsigned char *)fieldVal, ret * 2, 0);
+            fieldAsc[ret*2]=0x00;
+        } else
+            strcpy_s(fieldAsc, fieldVal, sizeof(fieldAsc));
+
+        memset(addData, 0, sizeof(addData));
+        ret=_get_field_data_safe(pub_data_stru,s_fldid, DB_MSG_TYPE, addData, 2,sizeof(addData)-1);
+        //if(ret >0) addData[ret]=0x00;
+        //else addData[0]=0x00;
+        dcs_debug(0,0,"at %s(%s:%d), addData[%s]fieldAsc=[%d][%s]",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData,strlen(fieldAsc),fieldAsc);
+        if(0 > SetFieldData(addData, d_fldid, fieldAsc, sizeof(addData), 1)) {
+            dcs_log(0, 0, "at %s(%s:%d), 设置数据失败[%d]失败！",__FUNCTION__,__FILE__,__LINE__,d_fldid);
+            EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+            return -1;
+        }
+        if(0>(ret = add_pub_field(pub_data_stru, s_fldid, DB_MSG_TYPE, strlen(addData), addData, 2))) {
+            dcs_log(0,0,"at %s(%s:%d), add_pub_field [%d] fail!",__FUNCTION__,__FILE__,__LINE__,s_fldid);
+        } else
+            dcs_debug(0,0,"at %s(%s:%d), add_pub_field [%d][%s] !",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData);
+    }
+    EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
+    return 1;
+}
+
+
+int trans_end_notify(glob_msg_stru *pub_data_stru) { //交易结束后的通知业务处理
+    char acq_code[6 + 1];
+    int i;
+    char handle[20 + 1];
+    char para[100 + 1];
+    char inst_code[8+1];
+    ICS_DEBUG(0);
+    memset(acq_code,0,sizeof(acq_code));
+    if(0 > _get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type, acq_code, 0,5)) return -1;
+    if(0 > E2E(pub_data_stru->insti_code, acq_code, pub_data_stru->center_result_code, 5)) return -1;
+//  dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <check_and_match> center ret_code=%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->center_result_code);
+
+    EXEC SQL
+    SELECT HANDLE,inst_code, PARA into :handle,:inst_code,:para
+    FROM END_NOTIFY
+    WHERE APP_TYPE = :pub_data_stru->app_type;
+
+    if(sqlca.sqlcode && sqlca.sqlcode !=1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, app_type=%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, pub_data_stru->app_type);
+        return -1;
+    }
+
+    rtrim(handle);
+    rtrim(para);
+    for(i = 0; gl_end_nofify[i].func != NULL; i++) {
+        if(strcmp(gl_end_nofify[i].handle, handle) == 0) {
+            return  gl_end_nofify[i].func(para,inst_code,pub_data_stru);
+        }
+    }
+
+    dcs_log(0,0,"at %s(%s:%d), <%s>处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
+    return -1;
+
+}
+
+int msgtype_convert(char *src_type, char * dest_type) {
+    char type[10],buf[5];
+
+    strcpy_s(buf,src_type,sizeof(buf));
+    ICS_DEBUG(0);
+    exec sql select dest_type into :type from type_convert where src_type = :buf;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, sql error !\n ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return 0;
+    }
+    rtrim(type);
+    snprintf(dest_type,5,"%s",type);
+    return 1;
+}
+
+int is_gm_type(const char * src_type) {
+    char flag[2], type[5];
+
+    strcpy_s(type,src_type,sizeof(type));
+
+    exec sql select flag into :flag from type_convert where src_type = :type;
+    if(sqlca.sqlcode !=0) {
+//      dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, <%s> sql error ! src_type=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__ ,type);
+        return 0;
+    }
+    if(flag[0] == 0x31) return 1;
+    return 0;
+}
+
+/*
+ 终端费用查询
+*/
+
+int query_expenses(glob_msg_stru *pub_data_stru) {
+    ICS_DEBUG(0);
+    char buf[128],pos_name[128],shop_no[20],pos_no[9],deposit_no[14];
+    int len,amount=0,pos_id,sum=0;
+    dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__);
+
+    memset(buf, 0, sizeof(buf));
+    len = _get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf, 0,sizeof(buf)-1);
+    if(0 > len) { //没有查询类信息
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        dcs_log(0,0,"at %s(%s:%d), 没有查询类信息",__FUNCTION__,__FILE__,__LINE__);
+        return 1;
+    }
+
+    if(buf[0] !='1') { // 费用类型不为终端押金
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        dcs_log(0,0,"at %s(%s:%d), 费用类型不为终端押金buf=[%s]",__FUNCTION__,__FILE__,__LINE__,buf);
+        return 1;
+    }
+
+    if(buf[1] == '1') { // 按照商户号、终端号查询押金
+        memcpy(shop_no,buf+2,15);
+        shop_no[15]=0x00;
+        memcpy(pos_no,buf+17,8);
+        pos_no[8]=0x00;
+        exec sql select  pos_id,pos_name,amount,deposit_no into :pos_id,:pos_name,:amount,:deposit_no from view_para_foregift where shop_no = :shop_no and pos_no = :pos_no and rownum =1;
+    } else if(buf[1] == '2') { // 按照押金单号查询押金
+        if(len <22)
+            snprintf(shop_no,sizeof(shop_no),"%s",buf+2);
+        else {
+            memcpy(shop_no,buf+2,19);
+            shop_no[19]=0x00;
+        }
+        exec sql select  pos_id,pos_name,amount,deposit_no into :pos_id,:pos_name,:amount,:deposit_no from view_deposit_foregift where deposit_no = :shop_no;
+    } else {
+        strcpy(pub_data_stru->center_result_code,"30");
+        dcs_log(0,0,"at %s(%s:%d), 查询条件不能识别",__FUNCTION__,__FILE__,__LINE__);
+        return 1;
+    }
+
+    if(sqlca.sqlcode ==1403) { // 没有找到记录
+        strcpy(pub_data_stru->center_result_code,"03");
+        return 1;
+    } else if(sqlca.sqlcode !=0) { // 数据库故障
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  table error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return 1;
+    }
+    rtrim(deposit_no);
+    dcs_debug(0,0,"at %s(%s:%d), deposit_no=[%s] ",__FUNCTION__,__FILE__,__LINE__,deposit_no);
+    exec sql select sum(amount) into :sum from expenses_detail where deposit_no = :deposit_no and type ='1';
+    if(sqlca.sqlcode != 0 && sqlca.sqlcode !=1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  expenses_detail error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return 1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), amount=%d,sum=%d",__FUNCTION__,__FILE__,__LINE__,amount*100,sum);
+    sprintf(buf,"%012d",amount*100-sum);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT, pub_data_stru->route_msg_type, 12, buf, 1); //设置返回的押金金额
+    rtrim(pos_name);
+    snprintf(buf,sizeof(buf),"%s|%s",deposit_no,pos_name);
+    add_pub_field(pub_data_stru, FIELD_INFO, pub_data_stru->route_msg_type, strlen(buf), buf, 1); //设置返回的押金单号和终端名称
+    strcpy_s(pub_data_stru->center_result_code,"00",sizeof(pub_data_stru->center_result_code));
+    return 1;
+}
+
+/*
+  检查终端费用是否缴纳过
+*/
+int check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_stru) {
+    char buf[30];
+    int len,sum=0,amount=0;
+    ICS_DEBUG(0);
+
+    dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__);
+    memset(buf, 0, sizeof(buf));
+    len = get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    if(len < 0) {
+        dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, FIELD_INFO, len);
+        strcpy(pub_data_stru->center_result_code,"30");
+        return -1;
+    }
+    //buf[len]=0;
+    if(buf[0] !='1') {
+        dcs_log(0, 0, "at %s(%s:%d), 无法识别的缴费类型！buf[0]=%02x",__FUNCTION__,__FILE__,__LINE__, buf[0]);
+        strcpy(pub_data_stru->center_result_code,"30");
+        return -1;
+    }
+    memset(buf, 0, sizeof(buf));
+    len = get_field_data_safe(pub_data_stru, 44, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    if(len < 0) {
+        dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, 44, len);
+        strcpy(pub_data_stru->center_result_code,"30");
+        return -1;
+    }
+    //buf[len]=0;
+    dcs_debug(0,0,"at %s(%s:%d), deposit_no=[%s]",__FUNCTION__,__FILE__,__LINE__,buf);
+    exec sql select  amount into :amount from view_deposit_foregift where deposit_no = :buf;
+    if(sqlca.sqlcode != 0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  view_deposit_foregift error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return -1;
+    }
+//  rtrim(deposit_no);
+    exec sql select sum(amount) into :sum from expenses_detail where deposit_no = :buf and type='1';
+    if(sqlca.sqlcode != 0 && sqlca.sqlcode !=1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  expenses_detail error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return -1;
+    }
+
+    memset(buf, 0, sizeof(buf));
+    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    if(len < 0) {
+        dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, 4, len);
+        strcpy(pub_data_stru->center_result_code,"30");
+        return -1;
+    }
+    //buf[len]=0x00;
+    dcs_debug(0,0,"at %s(%s:%d), amount=%d,sum=%d,buf=[%s]",__FUNCTION__,__FILE__,__LINE__,amount,sum,buf);
+    if((sum+atol(buf)) > amount*100) { // 金额过大
+        strcpy(pub_data_stru->center_result_code,"13");
+        dcs_log(0,0,"at %s(%s:%d), 金额过大",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+
+    return 1;
+}
+
+int check_card_limit(char *card_no,char *iss_insti, char *flag) {
+    if(card_no == NULL || iss_insti == NULL) return -1;
+
+    if(flag == NULL) {
+        exec sql select 1 from CARDBIN_ad where :iss_insti = insti_code and :card_no like (trim(bin) ||'%') and rownum=1 order by length(bin) desc;
+    } else {
+        exec sql select 1 from CARDBIN_ad where :iss_insti = insti_code and cardtype=:flag and :card_no like (trim(bin) ||'%') and rownum=1 order by length(bin) desc;
+    }
+
+    if(sqlca.sqlcode ==  0)
+        return 1;
+
+    if(sqlca.sqlcode ==  1403)
+        return 0;
+    else
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+    return 1;
+
+}
+
+
+int get_term_discount_info(DISCNT_INFO *discnt_info) {
+    DISCNT_INFO  ldiscnt_info;
+    memset(&ldiscnt_info,0,sizeof(ldiscnt_info));
+    exec sql select type,begin_date,end_date,para,check_list into :ldiscnt_info.type,
+     :ldiscnt_info.begin_date,:ldiscnt_info.end_date,:ldiscnt_info.para ,:ldiscnt_info.check_list
+         from discount where term_id = :discnt_info->term_id and used='1';
+    if(sqlca.sqlcode != 0    && sqlca.sqlcode !=1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  discount error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    } else if(sqlca.sqlcode ==1403) {
+        dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, not found record! term_id=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,discnt_info->term_id);
+        return 0;
+    }
+    rtrim(ldiscnt_info.para);
+    rtrim(ldiscnt_info.check_list);
+    snprintf(discnt_info->type,sizeof(ldiscnt_info.type),"%s",ldiscnt_info.type);
+    snprintf(discnt_info->begin_date,sizeof(ldiscnt_info.begin_date),"%s",ldiscnt_info.begin_date);
+    snprintf(discnt_info->end_date,sizeof(ldiscnt_info.end_date),"%s",ldiscnt_info.end_date);
+    snprintf(discnt_info->para,sizeof(ldiscnt_info.para),"%s",ldiscnt_info.para);
+    snprintf(discnt_info->check_list,sizeof(ldiscnt_info.check_list),"%s",ldiscnt_info.check_list);
+    dcs_debug(0,0,"at %s(%s:%d), type=[%s]",__FUNCTION__,__FILE__,__LINE__,discnt_info->type);
+    return 1;
+}
+
+/**
+针对于以终端方式上送的撤销类交易校验管理员密码
+**/
+int verify_passwd(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char pwd[30],term_id[20],tmp[30];
+    int len;
+    if(0 > (len=get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "08"),
+                                    pub_data_stru->in_msg_type, pwd,sizeof(pwd)-1))) {
+        dcs_log(0, 0, "at %s(%s:%d), 取管理员密码[08]出错！",__FUNCTION__,__FILE__,__LINE__);
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    pwd[len]=0x00;
+    if(pub_data_stru->insti_work_type) {
+        if(0 > (len=get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id,sizeof(term_id)-1))) {
+            dcs_log(0, 0, "at %s(%s:%d), 取管理员密码[08]出错！",__FUNCTION__,__FILE__,__LINE__);
+            strcpy(pub_data_stru->center_result_code,"30");
+            return -1;
+        }
+        term_id[len]=0x00;
+        exec sql select passwd into :tmp from term_mana_pwd where term_id= :term_id;
+        if(sqlca.sqlcode != 0   && sqlca.sqlcode !=1403) {
+            dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select  term_mana_pwd error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            strcpy(pub_data_stru->center_result_code,"96");
+            return -1;
+        } else if(sqlca.sqlcode ==1403) {
+            dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, not found record! term_id=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,term_id);
+            return 1;
+        }
+        rtrim(tmp);
+        if(strcmp(tmp,pwd)==0)
+            return 1;
+        strcpy(pub_data_stru->center_result_code,"TZ5");
+        dcs_log(0,0,"at %s(%s:%d), 管理员密码错误,上送密码[%s],数据库密码[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pwd,tmp);
+        return -1;
+    }
+    return 1;
+}
+
+int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head,char *advert_inf,char *advert_tail) {
+    char tmp1[200 + 1];
+    char tmp2[200 + 1];
+    char tmp3[200 + 1];
+    char tmp4[200 + 1];
+    char *p,*p1,tmp[64];
+    int i,n;
+
+    exec sql select advert_head,advert_inf, advert_tail,cond_permit into :tmp1,:tmp2,:tmp3,tmp4
+    from  term_advert where term_id =:term_id  and sysdate >begin_time and sysdate < end_time and used='1';
+
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  term_advert error ! term_id=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,term_id);
+        return -1;
+    }
+    rtrim(tmp1);
+    rtrim(tmp2);
+    rtrim(tmp3);
+    rtrim(tmp4);
+    if((n=strlen(tmp4)) >0)
+        for(p=my_split(tmp4,',',tmp,sizeof(tmp)); p; p=my_split(p,',',tmp,sizeof(tmp))) {
+            dcs_debug(0,0,"at %s(%s:%d), p=[%p] tmp4=[%p]",__FUNCTION__,__FILE__,__LINE__,p,tmp4);
+            dcs_debug(0,0,"at %s(%s:%d), p=[%s]",__FUNCTION__,__FILE__,__LINE__,p);
+//          l=strlen(p);
+//          n =n-l -1;
+            p1=tmp;
+            while(*p1) {
+                if(*p1 =='|') {
+                    *p1=0x00;
+                    p1++;
+                    break;
+                }
+                p1++;
+            }
+            dcs_debug(0,0,"at %s(%s:%d), func=[%s] para=[%s]",__FUNCTION__,__FILE__,__LINE__,tmp,p1);
+            for(i = 0; gl_advert_proc[i].func != NULL; i++) {
+                if(strcmp(gl_advert_proc[i].handle, tmp) == 0) {
+                    dcs_debug(0,0,"at %s(%s:%d), func=[%s]",__FUNCTION__,__FILE__,__LINE__,tmp);
+                    if(gl_advert_proc[i].func(p1,0,pub_data_stru) <0)
+                        return -1;
+                }
+            }
+        }
+    snprintf(advert_head,200,"%s",tmp1);
+    snprintf(advert_inf,200,"%s",tmp2);
+    snprintf(advert_tail,200,"%s",tmp3);
+    return 1;
+}
+int is_valid_cardbin(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+
+    char cardno[30];
+    int i;
+    dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__);
+    if(para == NULL)
+        return -1;
+
+    memset(cardno, 0, sizeof(cardno));
+    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    if(i<=0) return -1;
+    //cardno[i]=0x00;
+    rtrim(para);
+
+    exec sql select 1 from cardbin where bankcode
+        in (select regexp_substr(:para, '[^|]+', 1, level)
+    from dual
+       connect by regexp_substr(:para, '[^|]+', 1, level) is not null) and
+         :cardno like ( trim(bin) || '%') and rownum=1;
+
+    if(sqlca.sqlcode ==1403) {
+//      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s>can not found!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
+        return 1;
+    }
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), end",__FUNCTION__,__FILE__,__LINE__);
+    strcpy_s(pub_data_stru->center_result_code,CODE_NO_SUPPORT,sizeof(pub_data_stru->center_result_code));
+    return -1;
+}
+
+int check_cardbin(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char card_type[2],insti_code[10][9],*p;
+    char tmp[512],cardno[30];
+    int i,n;
+    dcs_debug(0,0,"at %s(%s:%d), begin para=[%s]",__FUNCTION__,__FILE__,__LINE__,para);
+    if(para == NULL)
+        return -1;
+    p=my_split(para,'|',tmp,sizeof(tmp));
+    card_type[0]=tmp[0];
+    card_type[1]=0x00;
+    insti_code[0][0]=0x00;
+    memset(cardno, 0, sizeof(cardno));
+    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    if(i<=0)
+        return -1;
+    //cardno[i]=0x00;
+    for(i=0,p=my_split(p,'|',tmp,sizeof(tmp)); p && i<10; p=my_split(p,'|',tmp,sizeof(tmp)),i++) {
+        if(strlen(tmp) <9)
+            strcpy_s(insti_code[i], tmp, sizeof(insti_code[i]));
+        else {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, para error![%s]",__FUNCTION__,__FILE__,__LINE__,tmp);
+            return -1;
+        }
+        dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, insti_code[%d]=[%s]",__FUNCTION__,__FILE__,__LINE__,i,insti_code[i]);
+    }
+    if(strlen(insti_code[0]) >0) {
+//      strcpy(tmp,"'");
+        tmp[0]=0x00;
+        for(n =0; n<i; n++) {
+            strcat(tmp,insti_code[n]);
+            strcat(tmp,",");
+        }
+        tmp[strlen(tmp)-1]=0x00;
+        dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, tmp=[%s]",__FUNCTION__,__FILE__,__LINE__,tmp);
+        if(card_type[0]=='0') {
+            exec sql select 1 from cardbin_ad where insti_code
+            in (select regexp_substr(:tmp, '[^,]+', 1, level)
+            from dual
+            connect by regexp_substr(:tmp, '[^,]+', 1, level) is not null) and
+            :cardno like ( trim(bin) || '%') and rownum=1;
+        } else {
+            exec sql select 1 from cardbin_ad where insti_code in (select regexp_substr(:tmp, '[^,]+', 1, level)
+            from dual
+            connect by regexp_substr(:tmp, '[^,]+', 1, level) is not null) and
+            :cardno like ( trim(bin) || '%') and card_type=:card_type and rownum=1;
+        }
+    } else {
+        if(card_type[0]=='0') {
+            dcs_debug(0,0,"at %s(%s:%d), no match ,return 1",__FUNCTION__,__FILE__,__LINE__);
+            return 1;
+        } else {
+            dcs_debug(0,0,"at %s(%s:%d), no insti and match  ",__FUNCTION__,__FILE__,__LINE__);
+            exec sql select 1 from cardbin_ad where
+             card_type=:card_type and :cardno like ( trim(bin) || '%') and rownum=1;
+        }
+    }
+
+    if(sqlca.sqlcode ==1403) {
+        dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, can not found!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, end",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+    return 1;
+}
+/**
+营销活动检查模块
+功能：检查该商户集合的营销活动次数是否超限
+para: 总笔数|开始日期|商户号1|商户号2|...
+**/
+int check_cnt_mer(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char *p,*p1,tmp[512+1],begin_date[9];
+    int cnt ,n;
+    dcs_debug(0,0,"at %s(%s:%d), begin ",__FUNCTION__,__FILE__,__LINE__);
+    p=p1=para;
+
+    while(*p1) {
+        if(*p1 == '|') break;
+        p1++;
+    }
+    *p1=0x00;
+    p1++;
+    if(strlen(p)<=0) {
+        dcs_log(0,0,"at %s(%s:%d), para is null!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    cnt =atoi(p);
+    if(cnt <=0) {
+        dcs_log(0,0,"at %s(%s:%d), cnt para is error[%s]!",__FUNCTION__,__FILE__,__LINE__,p);
+        return -1;
+    }
+
+    p=p1;
+    while(*p1) {
+        if(*p1 == '|') break;
+        p1++;
+    }
+    *p1=0x00;
+    p1++;
+    if(strlen(p)<8) {
+        dcs_log(0,0,"at %s(%s:%d), begin date para is null!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    memcpy(begin_date,p,8);
+    begin_date[8]=0x00;
+    tmp[0]=0x00;
+    for(p=p1; *p1; p1++) {
+        if(*p1=='|') *p1=',';
+
+    }
+    snprintf(tmp,sizeof(tmp),"%s",p);
+    if(tmp[0]==0x00) {
+        dcs_log(0,0,"at %s(%s:%d), begin shop_id para is null!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), begin_date=[%s],shop_id set=[%s]",__FUNCTION__,__FILE__,__LINE__,begin_date,tmp);
+    if(strcmp(begin_date,"00000000")==0) {
+        exec sql select count(1) into :n from translog where trim(pay_term_id2) in (select regexp_substr(:tmp, '[^,]+', 1, level)
+        from dual
+        connect by regexp_substr(:tmp, '[^,]+', 1, level) is not null) and
+              resp_cd_rcv='00' and void_flag= '0' and app_type= 'A014' and sys_date = to_char(sysdate,'yyyymmdd') and amount_pay != amount_real;
+    } else {
+        exec sql select count(1) into :n from translog where trim(pay_term_id2) in (select regexp_substr(:tmp, '[^,]+', 1, level)
+        from dual
+        connect by regexp_substr(:tmp, '[^,]+', 1, level) is not null) and
+               resp_cd_rcv='00' and void_flag= '0' and app_type= 'A014' and sys_date >= :begin_date and amount_pay != amount_real;
+    }
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(cnt >n) return 1;
+    dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, end cnt=[%d],n=[%d] ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,cnt,n);
+    return -1;
+}
+
+
+/**
+营销活动检查模块
+功能：检查该营销活动 是否在 活动的日期中，主要是针对某月的某天或某周的某天来实现
+**/
+int check_valid_date(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char psam_no[20];
+    int n;
+    dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+    n = get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, psam_no,sizeof(psam_no)-1);
+    if(n<=0) {
+        dcs_log(0,0,"at %s(%s:%d), get_field_data_safe FIELD_PSAM_NO fail! ",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    psam_no[n]=0x00;
+    exec sql select 1 from valid_date_mg where  psam = :psam_no and  to_char(sysdate,'yyyymmdd')= vld_date;
+
+    if(sqlca.sqlcode) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d), end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
+}
+
+
+/**
+营销活动检查模块
+功能：检查该卡是否在当天已超过活动次数的限制
+**/
+int check_cntuser_curdate(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char cardno[30];
+    int n,cnt;
+    n = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    if(n<=0) return -1;
+    cardno[n]=0x00;
+    if(para == NULL) {
+        dcs_log(0,0,"at %s(%s:%d), para is null!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+
+    cnt =atoi(para);
+    if(cnt <=0) {
+        dcs_log(0,0,"at %s(%s:%d), cnt para is error[%s]!",__FUNCTION__,__FILE__,__LINE__,para);
+        return -1;
+    }
+    n=0;
+    exec sql select count(1) into :n from translog where pay_acct_no =:cardno and
+          resp_cd_rcv='00' and void_flag= '0' and app_type='A014' and sys_date = to_char(sysdate,'yyyymmdd') and amount_pay != amount_real;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(cnt >n) return 1;
+    dcs_debug(0,0,"at %s(%s:%d), cnt=[%d],n=[%d]",__FUNCTION__,__FILE__,__LINE__,cnt,n);
+    return -1;
+}
+

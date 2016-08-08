@@ -1,0 +1,68 @@
+#include "base.h"
+#include<string.h>
+#include "ibdcs.h"
+#include "general_util.h"
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+
+int delete_timeout_table(glob_msg_stru *pub_data_stru) {
+    timeout_stru timeout_table;
+    char field_id_set[100 + 1];
+	
+    EXEC SQL SELECT FIELD_ID_SET INTO :field_id_set
+       FROM MSG_KEY WHERE MSG_TYPE = :pub_data_stru->in_msg_type;
+    if(sqlca.sqlcode) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select msg_key error !\n msg_type=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->in_msg_type);
+        return -1;
+    }
+	
+    memset(&timeout_table,0,sizeof(timeout_table));
+    if(0 > pack_key(pub_data_stru->timeout_table.key, sizeof(pub_data_stru->timeout_table.key), field_id_set, pub_data_stru, pub_data_stru->in_msg_type, 0, 0))
+        return -1;
+//  dcs_debug(0,0,"<%s> key=[%s]",__FUNCTION__,pub_data_stru->timeout_table.key);
+    EXEC SQL SELECT
+       SYS_DATE  ,
+       SYS_TIME  ,
+       FLAG      ,
+       TIMEOUT   ,
+       NUM       ,
+       REMARK    ,
+       KEY       ,
+       CAKEY     ,
+       trans_type
+    INTO
+       :timeout_table.sys_date,
+       :timeout_table.sys_time,
+       :timeout_table.flag,
+       :timeout_table.invalid_time,
+       :timeout_table.num,
+       :timeout_table.remark,
+       :timeout_table.key,
+       :timeout_table.first_key,
+       :timeout_table.trans_type
+    FROM TRANSTIMEOUT
+    WHERE KEY = :pub_data_stru->timeout_table.key FOR UPDATE;
+    if(sqlca.sqlcode) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSTIMEOUT Error. key[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->timeout_table.key);
+        return -1;
+    }
+    memcpy(&pub_data_stru->timeout_table, &timeout_table, sizeof(timeout_stru));
+//  dcs_debug(0,0,"<%s> trans_type=[%s]",__FUNCTION__,pub_data_stru->timeout_table.trans_type);
+    snprintf(pub_data_stru->in_trans_type,5,"%s",pub_data_stru->timeout_table.trans_type);
+    rtrim(pub_data_stru->timeout_table.key);
+    EXEC SQL DELETE FROM TRANSTIMEOUT WHERE KEY = :pub_data_stru->timeout_table.key;
+    if(sqlca.sqlcode) {
+		dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, delete TRANSTIMEOUT Error. key[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, pub_data_stru->timeout_table.key);
+        EXEC SQL COMMIT;
+        return -1;
+    }
+    EXEC SQL COMMIT;
+//  dcs_debug(0, 0, "<%s:delete_timeout_table>delete TRANSTIMEOUT succ. key[%s]",__FUNCTION__, pub_data_stru->timeout_table.key);
+    return 1;
+}

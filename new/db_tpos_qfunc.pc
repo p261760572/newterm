@@ -1,0 +1,1646 @@
+#include "tpos.h"
+#include "base.h"
+#include "ic.h"
+#include "var.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <ibdcs.h>
+#include "general_util.h"
+#include "tools.h"
+
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+
+int is_trust_tel(char * tel) {
+    char tmp[128];
+    if(tel == NULL)
+        return 0;
+
+    strcpy_s(tmp, tel, sizeof(tmp));
+    exec sql select 1 from turst_tel where tel_no = :tmp;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select turst_tel error ! tel_no=[%s] [%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,tel);
+        return 0;
+    }
+    return 1;
+}
+
+
+int get_delay_time(char *trans_type) {
+    char tmp[5];
+    int k;
+    if(!trans_type) return 14;
+    strcpy_s(tmp,trans_type,sizeof(tmp));
+    dcs_debug(0,0,"at %s(%s:%d)  begin trans_type=[%s]",__FUNCTION__,__FILE__,__LINE__,trans_type);
+    exec sql select delay_time into :k from tpos_disp_delay where trans_type = :tmp;
+    if(sqlca.sqlcode !=0) {
+        if(sqlca.sqlcode !=1403)
+            dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select tpos_disp_delay error !\n [%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return 14;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  end trans_type=[%s] delay_time=%d",__FUNCTION__,__FILE__,__LINE__,trans_type,k);
+    if(k <0 || k >240) return 14;
+    return k;
+
+}
+int get_tpos_info(char *psam,struct TPOS_TERM_INFO *terminfo) {
+    struct TPOS_TERM_INFO  t;
+    char tmp[32];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d)  begin ",__FUNCTION__,__FILE__,__LINE__);
+    memset(&t,0,sizeof(t));
+    strcpy_s(tmp,psam,sizeof(tmp));
+
+    exec sql select psam,status,menu_ver,tel_no,comm_type,is_bind,menu_update_flag,download_flag,
+        last_menu_para_step,last_other_para_step,last_node_set,stack_detail,last_ic_para_step,
+          last_ic_key_step,name,to_char(last_settle_time,'yyyymmddhh24miss')
+      into
+          :t.psam,
+          :t.status,
+          :t.menu_ver,
+          :t.tel_no,
+          :t.comm_type,
+          :t.is_bind,
+          :t.menu_update_flag,
+          :t.download_flag ,
+          :t.last_menu_para_step,
+          :t.last_other_para_step,
+          :t.last_node_set,
+          :t.stack_detail,
+          :t.last_ic_para_step,
+          :t.last_ic_key_step,
+          :t.name,
+          :t.settle_time
+
+          from tpos_info where psam=:tmp;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select tpos_info table error !\n psam=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,tmp);
+        return -1;
+    }
+    rtrim(t.tel_no);
+    rtrim(t.name);
+    rtrim(t.stack_detail);
+    rtrim(t.last_node_set);
+    memcpy(terminfo,&t,sizeof(t));
+    dcs_debug(0,0,"at %s(%s:%d) end ",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
+}
+// 将操作码名称转换为报文中的实际操作码
+int tpos_conver_priv_field_code(const field_define *p_fld,
+                                const char *func_code,char *data) {
+    int disp_indx;
+    unsigned char t1,t2;
+    ICS_DEBUG(0);
+
+    exec sql select disp_indx into :disp_indx from tpos_func_op_title where
+              field_name=:p_fld->name and func_code=:func_code;
+    t1=(unsigned char)(p_fld->name[0]<<4);
+
+    if((p_fld->name[1] >='A' && p_fld->name[1] <='F') ||
+       (p_fld->name[1] >='a' && p_fld->name[1] <='f'))
+        t2=(unsigned char)(p_fld->name[1]&0x0f) +9;
+    else
+        t2=(unsigned char)(p_fld->name[1]&0x0f);
+    t1=t1 | t2;
+    if(sqlca.sqlcode == 1403) {
+        t1=t1 |0x80;
+        t1=t1&0xBF;
+        data[0]=t1;
+        return 1;
+    } else if(sqlca.sqlcode != 0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select tpos_func_op_title error! /n%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    data[0]=t1 &0x3F;
+    data[1]= disp_indx;
+    return 2;
+}
+int tpos_add_result_disp(glob_msg_stru *pub_data_stru) {
+    char disp[256],tmp[512],tmp1[512];
+    int i;
+
+    if(0<(i=get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->route_msg_type,
+                                "22"),pub_data_stru->route_msg_type,
+                                tmp1,sizeof(tmp1)-1))) {
+        tmp1[1]=get_delay_time(pub_data_stru->route_trans_type);
+        update_pub_field(pub_data_stru,
+                         get_pub_field_id(pub_data_stru->route_msg_type,"22"),
+                         pub_data_stru->route_msg_type,i,tmp1,1);
+        return 1;
+    }
+    strcpy_s(tmp1,pub_data_stru->center_result_code, sizeof(tmp1));
+    dcs_debug(0,0,"at %s(%s:%d)  cener_result_code=[%s]",__FUNCTION__,__FILE__,__LINE__,tmp1);
+    exec sql select disp into :disp from tpos_result_disp
+              where ret_code=:pub_data_stru->center_result_code;
+    if(sqlca.sqlcode ==1403)
+        snprintf(disp,sizeof(disp),"请与中心联系!");
+    else if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select tpos_result_disp error! /n%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    } else
+        rtrim(disp);
+    i=strlen(disp);
+    tmp[0]=0x31;
+    if(strcmp(pub_data_stru->app_type,"004")==0 &&
+       strcmp(pub_data_stru->center_result_code,"00")==0)
+        tmp[1]=0x01; //判断是否冲正交易，区别不同的显示停留时间
+    else if(strcmp(pub_data_stru->center_result_code,"00")!=0)
+        tmp[1]=0x14;
+    else
+        tmp[1]= get_delay_time(pub_data_stru->route_trans_type);
+    snprintf(tmp+2,sizeof(tmp)-2,"%-3.3s",tmp1);
+    memcpy(tmp+5,disp,i);
+    tmp[5+i]=0x00;
+    if(0> add_pub_field(pub_data_stru,
+                        get_pub_field_id(pub_data_stru->route_msg_type,"22"),
+                        pub_data_stru->route_msg_type,i+5,tmp,1)) {
+        dcs_log(0,0,"at %s(%s:%d) add_pub_field fail!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  disp:%s",__FUNCTION__,__FILE__,__LINE__,tmp+5);
+    return 1;
+}
+
+int tpos_gen_work_key(glob_msg_stru *pub_data_stru,const char *psam) {
+    char sek_indx[6],tek_indx[6],tm_key[33],pin_key1[33],pin_key2[33+8];
+    char tmp[256],mac_key1[33],mac_key2[33+8],cd_key1[33],cd_key2[33+8];
+    int n;
+    ICS_DEBUG(0);
+    memset(sek_indx,0,sizeof(sek_indx));
+    memset(tek_indx,0,sizeof(tek_indx));
+    memset(tm_key,0,sizeof(tm_key));
+    memset(pin_key1,0,sizeof(pin_key1));
+    memset(pin_key2,0,sizeof(pin_key2));
+    memset(mac_key1,0,sizeof(mac_key1));
+    memset(mac_key2,0,sizeof(mac_key2));
+    memset(cd_key1,0,sizeof(cd_key1));
+    memset(cd_key2,0,sizeof(cd_key2));
+    strcpy_s(tmp,psam,sizeof(tmp));
+
+    exec sql select sek_indx,tek_indx,tm_key1 into :sek_indx,:tek_indx,:tm_key
+         from tpos_key where psam=:tmp;
+
+    dcs_debug(0,0,"at %s(%s:%d) begin tpos_gen_work_key",__FUNCTION__,__FILE__,__LINE__);
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select tpos_key error! \n errmsg:\n%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(pub_data_stru->in_cry_flag) {
+        if(0>_tpos_get_smkey(sek_indx,sek_indx,tm_key,pin_key1,pin_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+        dcs_debug(0,0,"at %s(%s:%d) , pin_key=%s",__FUNCTION__,__FILE__,__LINE__,pin_key2);
+        //  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
+        if(0 >_tpos_get_smkey(sek_indx,sek_indx,tm_key,mac_key1,mac_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+
+        memcpy(pub_data_stru->route_mac_key,mac_key1,32);
+        snprintf(pub_data_stru->route_mac_index,5,"%s",sek_indx);
+        dcs_debug(mac_key1,32,"at %s(%s:%d) , mac_key2=%s",__FUNCTION__,__FILE__,__LINE__,mac_key2);
+        if(0>_tpos_get_smkey(sek_indx,sek_indx,tm_key,cd_key1,cd_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+    } else {
+        if(0>_tpos_get_key32(sek_indx,sek_indx,tm_key,pin_key1,pin_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+        dcs_debug(0,0,"at %s(%s:%d) , pin_key=%s",__FUNCTION__,__FILE__,__LINE__,pin_key2);
+        //  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
+        if(0 >_tpos_get_key32(sek_indx,sek_indx,tm_key,mac_key1,mac_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+
+        memcpy(pub_data_stru->route_mac_key,mac_key1,32);
+        strcpy_s(pub_data_stru->route_mac_index,sek_indx,sizeof(pub_data_stru->route_mac_index));
+        dcs_debug(mac_key1,32,"at %s(%s:%d) , mac_key2=%s",__FUNCTION__,__FILE__,__LINE__,mac_key2);
+        if(0>_tpos_get_key32(sek_indx,sek_indx,tm_key,cd_key1,cd_key2)) {
+            dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+            return -1;
+        }
+    }
+    dcs_debug(0,0,"at %s(%s:%d) , data_key=%s",__FUNCTION__,__FILE__,__LINE__,cd_key2);
+//  memcpy(pub_data_sru->route_data_key,cd_key1,32);
+    if(0>tpos_update_work_key((char *)psam,pin_key1,mac_key1,cd_key1))
+        return -1;
+    strcpy_s(pub_data_stru->center_result_code,"00",sizeof(pub_data_stru->center_result_code));
+    tmp[0]=0x05; //终端主密钥索引号
+    n=1;
+    tmp[n]=41; //终端PIN key 索引号
+    n++;
+    tmp[n]=0x10;
+    n++;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)pin_key2,32,0);
+    n=n+16;
+    tmp[n]=42; //终端MAC key 索引号
+    n++;
+    tmp[n]=0x10;
+    n++;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)mac_key2,32,0);
+    n=n+16;
+    tmp[n]=43; //终端DATA key 索引号
+    n++;
+    tmp[n]=0x10;
+    n++;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)cd_key2,32,0);
+    n=n+16;
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"39"),
+                  pub_data_stru->route_msg_type,n,tmp,1);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"28"),
+                  pub_data_stru->route_msg_type,0,tmp,1);
+    pub_data_stru->tmp_order[0]= 0x31;
+    return 1;
+}
+
+int tpos_get_work_key(const char *psam,char *pin_indx,char *mac_indx,char * data_indx,char* pin_key,char *mac_key,char * data_key) {
+    char sek_index[8],pin_key1[40],mac_key1[40],cd_key1[40],caPsam[17];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d) begin psam=[%s]",__FUNCTION__,__FILE__,__LINE__,psam);
+    memset(sek_index,0,sizeof(sek_index));
+    memset(pin_key1,0,sizeof(pin_key1));
+    memset(mac_key1,0,sizeof(mac_key1));
+    memset(cd_key1,0,sizeof(cd_key1));
+    memcpy(caPsam,psam,16);
+    caPsam[16]=0x00;
+    exec sql select sek_indx,pin_key,mac_key,cd_key into :sek_index,:pin_key1 ,
+          :mac_key1,:cd_key1  from tpos_key where psam=:caPsam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select tpos_key error! \n errmsg:\n%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  select end",__FUNCTION__,__FILE__,__LINE__);
+    rtrim(pin_key1);
+    rtrim(sek_index);
+    rtrim(mac_key1);
+    rtrim(cd_key1);
+//  dcs_debug(0,0,"at %s(%s:%d)  rtrim end",__FUNCTION__,__FILE__,__LINE__);
+    memcpy(pin_key,pin_key1,32);
+    memcpy(mac_key,mac_key1,32);
+    memcpy(data_key,cd_key1,32);
+    memcpy(pin_indx,sek_index,5);
+    memcpy(mac_indx,sek_index,5);
+    memcpy(data_indx,sek_index,5);
+    dcs_debug(0,0,"at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
+}
+
+/*
+函数功能
+    从菜单结构表中根据菜单版本号提取菜单结构
+入口参数
+    menu_ver : 菜单版本号
+    node_id : 菜单项id
+出口参数
+    menu_node : 菜单项id对应的结点信息
+返回值
+    -1 : 失败 1 : 成功
+*/
+
+int get_menu_node(char * menu_ver , int node_id , struct TPOS_MENU_NODE * menu_node) {
+    char m_menu_ver[8+1];//菜单版本号
+    int m_node_id;//菜单项id
+    int m_pre_node_id;//前结点
+    int m_right_node_id;
+    int m_left_node_id;
+    char m_leaf[1+1];//叶结点标志 0表示非叶结点 1表示是叶结点
+    char m_pre_flag[1+1];//前结点标志 0为前结点的左结点 1为前结点的右结点
+    ICS_DEBUG(0);
+    memset(m_menu_ver,0,sizeof(m_menu_ver));
+    memset(m_leaf,0,sizeof(m_leaf));
+    memset(m_pre_flag,0,sizeof(m_pre_flag));
+
+    EXEC SQL select menu_ver,node_id,pre_node_id,right_node_id,left_node_id,is_leaf,pre_flag into
+    :m_menu_ver,:m_node_id,:m_pre_node_id,:m_right_node_id,:m_left_node_id,:m_leaf,:m_pre_flag from menu_node_map where menu_ver = :menu_ver and node_id =:node_id;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, read menu_node_map DB error ! menu_ver=%s,node_id=%d",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,menu_ver,node_id);
+        return -1;
+    }
+
+    memcpy(menu_node->menu_ver,m_menu_ver,8);
+    menu_node->node_id=m_node_id;
+    menu_node->pre_node_id=m_pre_node_id;
+    menu_node->left_node_id=m_left_node_id;
+    menu_node->right_node_id=m_right_node_id;
+    memcpy(menu_node->is_leaf,m_leaf,1);
+    memcpy(menu_node->pre_flag,m_pre_flag,1);
+    return 1;
+}
+//获取菜单根节点
+int get_menu_root_node(char * menu_ver ,struct TPOS_MENU_NODE * menu_node) {
+    char m_menu_ver[8+1];//菜单版本号
+    int m_node_id;//菜单项id
+    int m_pre_node_id;//前结点
+    int m_right_node_id;
+    int m_left_node_id;
+    char m_leaf[1+1];//叶结点标志 0表示非叶结点 1表示是叶结点
+    char m_pre_flag[1+1];//前结点标志 0为前结点的左结点 1为前结点的右结点
+
+    ICS_DEBUG(0);
+    memset(m_menu_ver,0,sizeof(m_menu_ver));
+    memset(m_leaf,0,sizeof(m_leaf));
+    memset(m_pre_flag,0,sizeof(m_pre_flag));
+
+    EXEC SQL select menu_ver,node_ID,pre_node_id,right_node_id,left_node_id,is_leaf,pre_flag into
+     :m_menu_ver,:m_node_id,:m_pre_node_id,:m_right_node_id,:m_left_node_id,:m_leaf,:m_pre_flag from menu_node_map where menu_ver = :menu_ver and pre_node_id = 0;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, read menu_node_map DB error ! menu_ver=[%s]",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,menu_ver);
+        return -1;
+    }
+
+    memcpy(menu_node->menu_ver,m_menu_ver,4);
+    menu_node->node_id=m_node_id;
+    menu_node->pre_node_id=m_pre_node_id;
+    menu_node->right_node_id=m_right_node_id;
+    menu_node->left_node_id=m_left_node_id;
+    memcpy(menu_node->is_leaf,m_leaf,1);
+    memcpy(menu_node->pre_flag,m_pre_flag,1);
+    return 1;
+}
+
+int get_menu_cnt(char *menu_ver) {
+
+    int i;
+
+    ICS_DEBUG(0);
+    exec sql select count(*) into :i from menu_node_map where menu_ver = :menu_ver;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select menu_node_map error menu_ver=[%s]",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,menu_ver);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  count=%d",__FUNCTION__,__FILE__,__LINE__,i);
+    return i;
+}
+
+int get_node_info(char *menu_ver,int id,struct MENU_NODE_INFO *node_info) {
+    struct MENU_NODE_INFO t;
+    ICS_DEBUG(0);
+    memset(&t,0,sizeof(t));
+
+    exec sql select node_id,func_code,void_flag,func_disp_indx,title,op_code,use,step
+        into
+      :t.node_id,
+       :t.func_code,
+       :t.void_flag,
+       :t.func_disp_indx,
+       :t.title,
+       :t.op_code,
+       :t.use,
+       :t.step
+    from menu_node_info where node_id=:id and menu_ver=:menu_ver;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select menu_node_info error node_id=[%d]",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,id);
+        return -1;
+    }
+    memcpy(node_info,&t,sizeof(t));
+    return 1;
+}
+
+int get_next_part_para(char *ver,int step,struct TPOS_PARA_INFO * para) {
+    struct TPOS_PARA_INFO t;
+    ICS_DEBUG(0);
+//  dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
+    memset(&t,0,sizeof(t));
+
+    EXEC SQL select para_type,id,step,detail,control_info,use into
+    :t.para_type,:t.id,:t.step,:t.detail ,:t.control_info,:t.use
+    from (select para_type,id,step,detail,control_info,use from other_para_info where para_ver = :ver and step>:step order by step ) where rownum=1 ;
+    if(sqlca.sqlcode == 1403) return -1;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select other_para_info  error ! ver=[%s],step=%d",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,ver,step);
+        return -1;
+    }
+//  dcs_debug(0,0,"at %s(%s:%d)  end",__FUNCTION__,__FILE__,__LINE__);
+    rtrim(t.detail);
+    rtrim(t.control_info);
+    memcpy(para,&t,sizeof(t));
+    return 1;
+}
+
+
+int get_next_menu_node(char *menu_ver,int step, struct MENU_NODE_INFO *node_info) {
+    struct MENU_NODE_INFO t;
+    ICS_DEBUG(0);
+    memset(&t,0,sizeof(t));
+//  dcs_debug(0,0,"at %s(%s:%d)  exec sql begin",__FUNCTION__,__FILE__,__LINE__);
+
+    exec sql select node_id,func_code,void_flag,func_disp_indx,title,op_code,use,step
+        into
+      :t.node_id,
+       :t.func_code,
+       :t.void_flag,
+       :t.func_disp_indx,
+       :t.title,
+       :t.op_code,
+       :t.use,
+       :t.step
+    from (select node_id,func_code,void_flag,func_disp_indx,title,op_code,use,step from menu_node_info where menu_ver = :menu_ver and step >:step  order by step) where rownum=1;
+//  dcs_debug(0,0,"at %s(%s:%d)  exec sql end",__FUNCTION__,__FILE__,__LINE__);
+    if(sqlca.sqlcode ==1403) return -1;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select menu_node_info error! menu_ver,step=[%d]\n%s",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,menu_ver,step);
+        return -1;
+    }
+    node_info->node_id=t.node_id;
+    rtrim(t.func_code);
+    snprintf(node_info->func_code,sizeof(t.func_code),"%s",t.func_code);
+    node_info->void_flag[0]=t.void_flag[0];
+    node_info->func_disp_indx   =t.func_disp_indx;
+    rtrim(t.title);
+    snprintf(node_info->title,sizeof(t.title),"%s",t.title);
+    rtrim(t.op_code);
+    snprintf(node_info->op_code,sizeof(t.op_code),"%s",t.op_code);
+    node_info->use[0]=t.use[0];
+    node_info->step=t.step;
+//  memcpy(node_info,&t,sizeof(t));
+    return 1;
+}
+int get_para_ver(char *menu_ver, char *para_ver) {
+    char t_para_ver[5];
+    ICS_DEBUG(0);
+    memset(t_para_ver,0,sizeof(t_para_ver));
+    dcs_debug(menu_ver,9,"at %s(%s:%d)  menu_ver value",__FUNCTION__,__FILE__,__LINE__);
+    exec sql select  para_ver into :t_para_ver from other_para_ver where menu_ver=:menu_ver;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select other_para_ver error! menu_ver=[%s]\n%s",
+			__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,menu_ver);
+        return -1;
+    }
+    rtrim(t_para_ver);
+    strcpy(para_ver,t_para_ver);
+    return 1;
+}
+int get_other_para_info(char *type, int id, char *para_ver,struct TPOS_PARA_INFO *para_info) {
+    struct TPOS_PARA_INFO t;
+    ICS_DEBUG(0);
+    memset(&t,0,sizeof(t));
+
+    EXEC SQL select para_type,id,step,detail,control_info,use into
+    :t.para_type,:t.id,:t.step,:t.detail ,:t.control_info,:t.use
+    from other_para_info where para_type = :type and id=:id and para_ver=:para_ver;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select other_para_info  error ! ver=[%s],id=%d,type=[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,para_ver,id,type);
+        return -1;
+    }
+    rtrim(t.detail);
+    rtrim(t.control_info);
+    memcpy(para_info,&t,sizeof(t));
+    return 1;
+}
+int get_max_step(char *menu_ver) {
+    int i;
+    char tmp[16];
+    ICS_DEBUG(0);
+    i=0;
+    strcpy_s(tmp,menu_ver,sizeof(tmp));
+    exec sql select max(step) into :i from MENU_NODE_INFO where menu_ver = :tmp;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select menu_node_map  error ! menu_ver=[%s]\n%s ",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, menu_ver);
+    }
+    return i;
+}
+int get_tpos_sn(char *psam , char * sn) {
+    char t_sn[100],tmp[64];
+    ICS_DEBUG(0);
+    memset(t_sn,0,sizeof(t_sn));
+    strcpy_s(tmp, psam, sizeof(tmp));
+    exec sql select  sn into :t_sn from tpos_info where psam =:tmp;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select tpos_info  error ! psam=[%s]\n%s ",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    rtrim(t_sn);
+    strcpy(sn, t_sn);
+    return 1;
+}
+//修复返回len错误 BUG 20140909
+int get_ic_data(char *buf, int bSize, char *node_set, int *cnt) { //取IC数据，用于断点续传
+
+    pub_key_def pub_key;
+    ic_para_def ic_para;
+    int  t_para_step, l, len, i, dlen;
+    char delete_flag[1 + 1], rec_id[3 + 1];
+
+    char tmpbuf[256];
+    ICS_DEBUG(0);
+    rtrim(node_set);
+    *cnt = 0;
+    len = 0;
+    for(i = 0; i < strlen(node_set); i+=4) {
+        memcpy(rec_id, node_set + i + 1, 3);
+        rec_id[3] = 0;
+        if(*(node_set + i) == '1') {
+            EXEC SQL SELECT
+              REC_ID         ,
+              DELETE_FLAG    ,
+              PARA_STEP      ,
+            RID          ,
+            RID_INDEX    ,
+            VALID        ,
+            HASH_FLAG    ,
+            PUBKEY_FLAG  ,
+            PUBKEY       ,
+            PUBKEY_INDEX ,
+            PUBKEY_CHECK
+            INTO
+            :rec_id                 ,
+            :delete_flag            ,
+            :t_para_step            ,
+            :pub_key.rid          ,
+            :pub_key.rid_index    ,
+            :pub_key.valid        ,
+            :pub_key.hash_flag    ,
+            :pub_key.pubkey_flag  ,
+            :pub_key.pubkey       ,
+            :pub_key.pubkey_index ,
+            :pub_key.pubkey_check
+            FROM PUB_KEY
+            WHERE REC_ID = :rec_id;
+            if(sqlca.sqlcode) {
+                dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT PUB_KEY REC_ID=[%s]",
+                        __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, rec_id);
+                return -1;
+            }
+            rtrim(pub_key.rid);
+            rtrim(pub_key.rid_index);
+            rtrim(pub_key.valid);
+            rtrim(pub_key.hash_flag);
+            rtrim(pub_key.pubkey_flag);
+            rtrim(pub_key.pubkey);
+            rtrim(pub_key.pubkey_index);
+            rtrim(pub_key.pubkey_check);
+            *buf++ = '1';
+            l = 0;
+            if(delete_flag[0] == '1') {
+                *buf++ = '1';
+                memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+                l += 5;
+                memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0);
+                l += 1;
+            } else {
+                *buf++ = '0';
+                memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+                l += 5;
+                memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x05\x08", 3);
+                l += 3;
+                memcpy(tmpbuf + l, pub_key.valid, 8);
+                l += 8;
+                memcpy(tmpbuf + l,"\xDF\x06\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x07\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x02", 2);
+                l += 2;
+                dlen = strlen(pub_key.pubkey)/2;
+                if(dlen < 0x80) {
+                    *(tmpbuf + l) = dlen;
+                    l++;
+                } else if(dlen < 0x100) {
+                    *(tmpbuf + l) = 0x81;
+                    l++;
+                    *(tmpbuf + l) = dlen;
+                    l++;
+                } else {
+                    *(tmpbuf + l) = 0x82;
+                    l++;
+                    *(tmpbuf + l) = dlen / 0x100;
+                    l++;
+                    *(tmpbuf + l) = dlen % 0x100;
+                    l++;
+                }
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0);
+                l += strlen(pub_key.pubkey)/2;
+                memcpy(tmpbuf + l,"\xDF\x04", 2);
+                l += 2;
+                *(tmpbuf + l) = strlen(pub_key.pubkey_index)/2;
+                l += 1;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0);
+                l += strlen(pub_key.pubkey_index)/2;
+                memcpy(tmpbuf + l,"\xDF\x03", 2);
+                l += 2;
+                *(tmpbuf + l) = strlen(pub_key.pubkey_check)/2;
+                l += 1;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0);
+                l += strlen(pub_key.pubkey_check)/2;
+            }
+//          l = strlen(tmpbuf);
+            if(bSize - len > l + 3) {
+                *buf++ = l>>8;
+                *buf++ = l & 0xff;
+                memcpy(buf, tmpbuf, l);
+                buf += l;
+                len += l + 4;
+                (*cnt)++;
+            } else
+                return -1;
+        } else {
+            EXEC SQL SELECT
+              REC_ID         ,
+              DELETE_FLAG    ,
+              PARA_STEP      ,
+            AID            ,
+            ASI            ,
+            APP_VER        ,
+            TAC_DEFAULT    ,
+            TAC_ONLINE     ,
+            TAC_REFUSE     ,
+            LOWEST         ,
+            RANDOM_VAL     ,
+            RANDOM_MAX_PER ,
+            RABDOM_PER     ,
+            DDOL           ,
+            PIN            ,
+            LIMIT9F7B      ,
+            LIMITDF19      ,
+            LIMITDF20      ,
+            LIMITDF21
+            INTO
+            :rec_id                 ,
+            :delete_flag            ,
+            :t_para_step            ,
+            :ic_para.aid            ,
+            :ic_para.asi            ,
+            :ic_para.app_ver        ,
+            :ic_para.tac_default    ,
+            :ic_para.tac_online     ,
+            :ic_para.tac_refuse     ,
+            :ic_para.lowest         ,
+            :ic_para.random_val     ,
+            :ic_para.random_max_per ,
+            :ic_para.rabdom_per     ,
+            :ic_para.ddol           ,
+            :ic_para.pin            ,
+            :ic_para.limit9f7b      ,
+            :ic_para.limitdf19      ,
+            :ic_para.limitdf20      ,
+            :ic_para.limitdf21
+            FROM IC_PARA
+            WHERE REC_ID = :rec_id;
+            if(sqlca.sqlcode == 1403) break;
+            if(sqlca.sqlcode) {
+                dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT IC_PARA REC_ID=[%s]",
+                        __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, rec_id);
+                return -1;
+            }
+            rtrim(ic_para.aid);
+            rtrim(ic_para.asi);
+            rtrim(ic_para.app_ver);
+            rtrim(ic_para.tac_default);
+            rtrim(ic_para.tac_online);
+            rtrim(ic_para.tac_refuse);
+            rtrim(ic_para.lowest);
+            rtrim(ic_para.random_val);
+            rtrim(ic_para.random_max_per);
+            rtrim(ic_para.rabdom_per);
+            rtrim(ic_para.ddol);
+            rtrim(ic_para.pin);
+            rtrim(ic_para.limit9f7b);
+            rtrim(ic_para.limitdf19);
+            rtrim(ic_para.limitdf20);
+            rtrim(ic_para.limitdf21);
+            *buf++ = '0';
+            if(delete_flag[0] == '1') {
+                *buf++ = '1';
+                snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
+            } else {
+                *buf++ = '0';
+                snprintf(tmpbuf,sizeof(tmpbuf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+                         ic_para.aid            ,
+                         ic_para.asi            ,
+                         ic_para.app_ver        ,
+                         ic_para.tac_default    ,
+                         ic_para.tac_online     ,
+                         ic_para.tac_refuse     ,
+                         ic_para.lowest         ,
+                         ic_para.random_val     ,
+                         ic_para.random_max_per ,
+                         ic_para.rabdom_per     ,
+                         ic_para.ddol           ,
+                         ic_para.pin            ,
+                         ic_para.limit9f7b      ,
+                         ic_para.limitdf19      ,
+                         ic_para.limitdf20      ,
+                         ic_para.limitdf21);
+            }
+            l = strlen(tmpbuf);
+            if(bSize - len > l/2 + 3) {
+                *buf++ = (l/2)>>8;
+                *buf++ = (l/2) & 0xff;
+                asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
+                buf += l/2;
+                len += l/2 + 4;
+                (*cnt)++;
+            } else
+                return -1;
+        }
+    }
+    return len;
+}
+
+int get_aid_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt) {
+
+    ic_para_def ic_para;
+    int para_step, t_para_step, l, len;
+    char delete_flag[1 + 1], rec_id[3 + 1];
+
+    char tmpbuf[256];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
+    *cnt = 0;
+    para_step = *last_ic_para_step;
+    memset(&ic_para, 0, sizeof(ic_para_def));
+    EXEC SQL DECLARE G_IC_PARA_CUR CURSOR FOR
+    SELECT *
+    FROM
+    (
+        SELECT
+           REC_ID         ,
+           DELETE_FLAG    ,
+           PARA_STEP      ,
+        AID            ,
+        ASI            ,
+        APP_VER        ,
+        TAC_DEFAULT    ,
+        TAC_ONLINE     ,
+        TAC_REFUSE     ,
+        LOWEST         ,
+        RANDOM_VAL     ,
+        RANDOM_MAX_PER ,
+        RABDOM_PER     ,
+        DDOL           ,
+        PIN            ,
+        LIMIT9F7B      ,
+        LIMITDF19      ,
+        LIMITDF20      ,
+        LIMITDF21
+       FROM IC_PARA
+       WHERE
+        PARA_STEP > :para_step
+       ORDER BY PARA_STEP
+    );
+    EXEC SQL OPEN G_IC_PARA_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN IC_PARA_CUR PARA_STEP=[%d]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+        return -1;
+    }
+    len = 0;
+    while(1) {
+        EXEC SQL FETCH G_IC_PARA_CUR INTO
+           :rec_id                 ,
+           :delete_flag            ,
+           :t_para_step            ,
+        :ic_para.aid            ,
+        :ic_para.asi            ,
+        :ic_para.app_ver        ,
+        :ic_para.tac_default    ,
+        :ic_para.tac_online     ,
+        :ic_para.tac_refuse     ,
+        :ic_para.lowest         ,
+        :ic_para.random_val     ,
+        :ic_para.random_max_per ,
+        :ic_para.rabdom_per     ,
+        :ic_para.ddol           ,
+        :ic_para.pin            ,
+        :ic_para.limit9f7b      ,
+        :ic_para.limitdf19      ,
+        :ic_para.limitdf20      ,
+        :ic_para.limitdf21      ;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH G_IC_PARA_CUR PARA_STEP=[%d]",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+            EXEC SQL CLOSE G_IC_PARA_CUR;
+            return -1;
+        }
+        rtrim(ic_para.aid);
+        rtrim(ic_para.asi);
+        rtrim(ic_para.app_ver);
+        rtrim(ic_para.tac_default);
+        rtrim(ic_para.tac_online);
+        rtrim(ic_para.tac_refuse);
+        rtrim(ic_para.lowest);
+        rtrim(ic_para.random_val);
+        rtrim(ic_para.random_max_per);
+        rtrim(ic_para.rabdom_per);
+        rtrim(ic_para.ddol);
+        rtrim(ic_para.pin);
+        rtrim(ic_para.limit9f7b);
+        rtrim(ic_para.limitdf19);
+        rtrim(ic_para.limitdf20);
+        rtrim(ic_para.limitdf21);
+        *buf++ = '0';
+        if(delete_flag[0] == '1') {
+            *buf++ = '1';
+            snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
+        } else {
+            *buf++ = '0';
+            snprintf(tmpbuf,sizeof(tmpbuf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+                     ic_para.aid            ,
+                     ic_para.asi            ,
+                     ic_para.app_ver        ,
+                     ic_para.tac_default    ,
+                     ic_para.tac_online     ,
+                     ic_para.tac_refuse     ,
+                     ic_para.lowest         ,
+                     ic_para.random_val     ,
+                     ic_para.random_max_per ,
+                     ic_para.rabdom_per     ,
+                     ic_para.ddol           ,
+                     ic_para.pin            ,
+                     ic_para.limit9f7b      ,
+                     ic_para.limitdf19      ,
+                     ic_para.limitdf20      ,
+                     ic_para.limitdf21);
+        }
+        l = strlen(tmpbuf);
+        if(bSize - len > l/2 + 3) {
+            *buf++ = (l/2)>>8;
+            *buf++ = (l/2) & 0xff;
+            asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
+            buf += l/2;
+            len += l/2 + 4;
+            *(node_set + *cnt * 4) = '0';
+            memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
+            (*cnt)++;
+            *last_ic_para_step = t_para_step;
+        } else
+            break;
+        if(bSize < 23)
+            break;
+    }
+    EXEC SQL CLOSE G_IC_PARA_CUR;
+    dcs_debug(0,0,"at %s(%s:%d)  end",__FUNCTION__,__FILE__,__LINE__);
+    return len;
+}
+
+int get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt) {
+
+    pub_key_def pub_key;
+    int para_step, t_para_step, l, len, dlen;
+    char delete_flag[1 + 1], rec_id[3 + 1];
+
+    char tmpbuf[1024];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
+    *cnt = 0;
+    para_step = *last_ic_para_step;
+    memset(&pub_key, 0, sizeof(pub_key_def));
+
+    EXEC SQL DECLARE G_PUB_KEY_CUR CURSOR FOR
+       SELECT *
+       FROM
+       (
+        SELECT
+          REC_ID         ,
+          DELETE_FLAG    ,
+          PARA_STEP      ,
+        RID          ,
+        RID_INDEX    ,
+        VALID        ,
+        HASH_FLAG    ,
+        PUBKEY_FLAG  ,
+        PUBKEY       ,
+        PUBKEY_INDEX ,
+        PUBKEY_CHECK
+      FROM PUB_KEY
+      WHERE sm_flag = '0' and
+        PARA_STEP > :para_step
+      ORDER BY PARA_STEP
+    );
+
+    EXEC SQL OPEN G_PUB_KEY_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN G_PUB_KEY_CUR PARA_STEP=[%d]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+        return -1;
+    }
+    len = 0;
+    while(1) {
+        EXEC SQL FETCH G_PUB_KEY_CUR INTO
+           :rec_id                 ,
+           :delete_flag            ,
+           :t_para_step            ,
+        :pub_key.rid          ,
+        :pub_key.rid_index    ,
+        :pub_key.valid        ,
+        :pub_key.hash_flag    ,
+        :pub_key.pubkey_flag  ,
+        :pub_key.pubkey       ,
+        :pub_key.pubkey_index ,
+        :pub_key.pubkey_check ;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH PUB_KEY_CUR PARA_STEP=[%d]",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+            EXEC SQL CLOSE G_PUB_KEY_CUR;
+            return -1;
+        }
+        rtrim(pub_key.rid);
+        rtrim(pub_key.rid_index);
+        rtrim(pub_key.valid);
+        rtrim(pub_key.hash_flag);
+        rtrim(pub_key.pubkey_flag);
+        rtrim(pub_key.pubkey);
+        rtrim(pub_key.pubkey_index);
+        rtrim(pub_key.pubkey_check);
+        *buf++ = '1';
+        l = 0;
+        if(delete_flag[0] == '1') {
+            *buf++ = '1';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+            l += 1;
+        } else {
+            *buf++ = '0';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x05\x08", 3);
+            l += 3;
+            memcpy(tmpbuf + l, pub_key.valid, 8);
+            l += 8;
+            memcpy(tmpbuf + l,"\xDF\x06\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x07\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x02", 2);
+            l += 2;
+            dlen = strlen(pub_key.pubkey)/2;
+            if(dlen < 0x80) {
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else if(dlen < 0x100) {
+                *(tmpbuf + l) = 0x81;
+                l++;
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else {
+                *(tmpbuf + l) = 0x80;
+                l++;
+                *(tmpbuf + l) = dlen / 0x100;
+                l++;
+                *(tmpbuf + l) = dlen % 0x100;
+                l++;
+            }
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0);
+            l += strlen(pub_key.pubkey)/2;
+            memcpy(tmpbuf + l,"\xDF\x04", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_index)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0);
+            l += strlen(pub_key.pubkey_index)/2;
+            memcpy(tmpbuf + l,"\xDF\x03", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_check)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0);
+            l += strlen(pub_key.pubkey_check)/2;
+        }
+//      l = strlen(tmpbuf);
+        if(bSize - len > l + 3) {
+            *buf++ = l>>8;
+            *buf++ = l & 0xff;
+            memcpy(buf, tmpbuf, l);
+            buf += l;
+            len += l + 4;
+            *(node_set + *cnt * 4) = '1';
+            memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
+            (*cnt)++;
+            *last_ic_para_step = t_para_step;
+        } else
+            break;
+        if(bSize < 23)
+            break;
+    }
+    EXEC SQL CLOSE G_PUB_KEY_CUR;
+    dcs_debug(0, 0, "at %s(%s:%d)  end",__FUNCTION__,__FILE__,__LINE__);
+    return len;
+}
+int get_pubkey_data_sm(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt) {
+
+    pub_key_def pub_key;
+    int para_step, t_para_step, l, len, dlen;
+    char delete_flag[1 + 1], rec_id[3 + 1];
+
+    char tmpbuf[1024];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
+    *cnt = 0;
+    para_step = *last_ic_para_step;
+    memset(&pub_key, 0, sizeof(pub_key_def));
+
+    EXEC SQL DECLARE SM_PUB_KEY_CUR CURSOR FOR
+    SELECT *
+    FROM
+    (
+    SELECT
+      REC_ID         ,
+      DELETE_FLAG    ,
+      PARA_STEP      ,
+    RID          ,
+    RID_INDEX    ,
+    VALID        ,
+    HASH_FLAG    ,
+    PUBKEY_FLAG  ,
+    PUBKEY       ,
+    PUBKEY_INDEX ,
+    PUBKEY_CHECK
+    FROM PUB_KEY
+    WHERE
+    PARA_STEP > :para_step
+    ORDER BY PARA_STEP
+    );
+
+    EXEC SQL OPEN SM_PUB_KEY_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN G_PUB_KEY_CUR PARA_STEP=[%d]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+        return -1;
+    }
+    len = 0;
+    while(1) {
+        EXEC SQL FETCH SM_PUB_KEY_CUR INTO
+           :rec_id                 ,
+           :delete_flag            ,
+           :t_para_step            ,
+        :pub_key.rid          ,
+        :pub_key.rid_index    ,
+        :pub_key.valid        ,
+        :pub_key.hash_flag    ,
+        :pub_key.pubkey_flag  ,
+        :pub_key.pubkey       ,
+        :pub_key.pubkey_index ,
+        :pub_key.pubkey_check ;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH PUB_KEY_CUR PARA_STEP=[%d]",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+            EXEC SQL CLOSE SM_PUB_KEY_CUR;
+            return -1;
+        }
+        rtrim(pub_key.rid);
+        rtrim(pub_key.rid_index);
+        rtrim(pub_key.valid);
+        rtrim(pub_key.hash_flag);
+        rtrim(pub_key.pubkey_flag);
+        rtrim(pub_key.pubkey);
+        rtrim(pub_key.pubkey_index);
+        rtrim(pub_key.pubkey_check);
+        *buf++ = '1';
+        l = 0;
+        if(delete_flag[0] == '1') {
+            *buf++ = '1';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+            l += 1;
+        } else {
+            *buf++ = '0';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x05\x08", 3);
+            l += 3;
+            memcpy(tmpbuf + l, pub_key.valid, 8);
+            l += 8;
+            memcpy(tmpbuf + l,"\xDF\x06\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x07\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x02", 2);
+            l += 2;
+            dlen = strlen(pub_key.pubkey)/2;
+            if(dlen < 0x80) {
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else if(dlen < 0x100) {
+                *(tmpbuf + l) = 0x81;
+                l++;
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else {
+                *(tmpbuf + l) = 0x80;
+                l++;
+                *(tmpbuf + l) = dlen / 0x100;
+                l++;
+                *(tmpbuf + l) = dlen % 0x100;
+                l++;
+            }
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0);
+            l += strlen(pub_key.pubkey)/2;
+            memcpy(tmpbuf + l,"\xDF\x04", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_index)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0);
+            l += strlen(pub_key.pubkey_index)/2;
+            memcpy(tmpbuf + l,"\xDF\x03", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_check)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0);
+            l += strlen(pub_key.pubkey_check)/2;
+        }
+//      l = strlen(tmpbuf);
+        if(bSize - len > l + 3) {
+            *buf++ = l>>8;
+            *buf++ = l & 0xff;
+            memcpy(buf, tmpbuf, l);
+            buf += l;
+            len += l + 4;
+            *(node_set + *cnt * 4) = '1';
+            memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
+            (*cnt)++;
+            *last_ic_para_step = t_para_step;
+        } else
+            break;
+        if(bSize < 23)
+            break;
+    }
+    EXEC SQL CLOSE SM_PUB_KEY_CUR;
+    dcs_debug(0, 0, "at %s(%s:%d)  end",__FUNCTION__,__FILE__,__LINE__);
+    return len;
+}
+int select_old_tpos_log(tl_trans_log_def *pTransLog) {
+    tl_trans_log_def TransLog;
+    ICS_DEBUG(0);
+    memcpy(&TransLog, pTransLog, sizeof(tl_trans_log_def));
+    EXEC SQL SELECT
+       SYS_DATE        ,
+       SYS_TIME        ,
+       QS_DATE         ,
+       ACQ_INSTI_CODE  ,
+       PAY_INSTI_CODE  ,
+       APP_INSTI_CODE  ,
+       ACQ_MSG_TYPE    ,
+       ACQ_TRANS_TYPE  ,
+       APP_TYPE        ,
+       PAY_MSG_TYPE    ,
+       PAY_TRANS_TYPE  ,
+       APP_MSG_TYPE    ,
+       APP_TRANS_TYPE  ,
+       RESP_CD_APP     ,
+       RESP_CD_PAY     ,
+       RESP_CD_RCV     ,
+       PAY_ACCT_NO     ,
+       CARD_ATTR       ,
+       ISS_INSTI_CODE  ,
+       AMOUNT_PAY      ,
+       AMOUNT_REAL     ,
+       FEE             ,
+       ACQ_TRA_NO      ,
+       PAY_TRA_NO      ,
+       APP_TRA_NO      ,
+       ACQ_DATE        ,
+       ACQ_TIME        ,
+       PAY_DATE        ,
+       PAY_TIME        ,
+       APP_DATE        ,
+       APP_TIME        ,
+       ACQ_TERM_ID1    ,
+       ACQ_TERM_ID2    ,
+       PAY_TERM_ID1    ,
+       PAY_TERM_ID2    ,
+       APP_TERM_ID1    ,
+       APP_TERM_ID2    ,
+       ACQ_ADDITION    ,
+       PAY_ADDITION    ,
+       APP_ADDITION    ,
+       SYS_REF_NO      ,
+       POS_ENTRY_MD_CD ,
+       POS_COND_CD     ,
+       RCV_ACCT_NO     ,
+       TRANS_CURR_CD   ,
+       RESP_CD_AUTH_ID ,
+       STEP            ,
+       VOID_FLAG       ,
+       PERMIT_VOID
+    INTO
+       :TransLog.sys_date        ,
+       :TransLog.sys_time        ,
+       :TransLog.qs_date         ,
+       :TransLog.acq_insti_code  ,
+       :TransLog.pay_insti_code  ,
+       :TransLog.app_insti_code  ,
+       :TransLog.acq_msg_type    ,
+       :TransLog.acq_trans_type  ,
+       :TransLog.app_type        ,
+       :TransLog.pay_msg_type    ,
+       :TransLog.pay_trans_type  ,
+       :TransLog.app_msg_type    ,
+       :TransLog.app_trans_type  ,
+       :TransLog.resp_cd_app     ,
+       :TransLog.resp_cd_pay     ,
+       :TransLog.resp_cd_rcv     ,
+       :TransLog.pay_acct_no     ,
+       :TransLog.card_attr       ,
+       :TransLog.iss_insti_code  ,
+       :TransLog.amount_pay      ,
+       :TransLog.amount_real     ,
+       :TransLog.fee             ,
+       :TransLog.acq_tra_no      ,
+       :TransLog.pay_tra_no      ,
+       :TransLog.app_tra_no      ,
+       :TransLog.acq_date        ,
+       :TransLog.acq_time        ,
+       :TransLog.pay_date        ,
+       :TransLog.pay_time        ,
+       :TransLog.app_date        ,
+       :TransLog.app_time        ,
+       :TransLog.acq_term_id1    ,
+       :TransLog.acq_term_id2    ,
+       :TransLog.pay_term_id1    ,
+       :TransLog.pay_term_id2    ,
+       :TransLog.app_term_id1    ,
+       :TransLog.app_term_id2    ,
+       :TransLog.acq_addition    ,
+       :TransLog.pay_addition    ,
+       :TransLog.app_addition    ,
+       :TransLog.sys_ref_no      ,
+       :TransLog.pos_entry_md_cd ,
+       :TransLog.pos_cond_cd     ,
+       :TransLog.rcv_acct_no     ,
+       :TransLog.trans_curr_cd   ,
+       :TransLog.resp_cd_auth_id ,
+       :TransLog.step            ,
+       :TransLog.void_flag          ,
+       :TransLog.permit_void
+    FROM TRANSLOG
+    WHERE ACQ_MAC = :TransLog.acq_mac
+       AND ACQ_TRA_NO = :TransLog.acq_tra_no
+       AND ACQ_TERM_ID1 = :TransLog.acq_term_id1
+       AND SYS_DATE >= TO_CHAR(SYSDATE - 1, 'YYYYMMDD')
+    FOR UPDATE;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_MAC[%s], ACQ_TRA_NO[%s], ACQ_TERM_ID1[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, TransLog.acq_mac, TransLog.acq_tra_no, TransLog.acq_term_id1);
+        return 0;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TPOS_LOG Error.\n"
+                "ACQ_MAC[%s], ACQ_TRA_NO[%s], ACQ_TERM_ID1[%s]",
+                __FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, TransLog.acq_mac, TransLog.acq_tra_no, TransLog.acq_term_id1);
+        return -1;
+    }
+    memcpy(pTransLog, &TransLog, sizeof(tl_trans_log_def));
+    return 1;
+}
+
+int get_menu_update_flag(char * msg_type,char * func_code) {
+    char flag[2];
+
+    memset(flag,0,sizeof(flag));
+
+    exec sql select priv_flag into :flag from app_type where msg_type=:msg_type and app_key=:func_code;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT app_type Error.\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return 0;
+    }
+    if(flag[0]== 0x31) return 1;
+    return 0;
+}
+
+
+/*
+ 终端费用查询
+*/
+
+int tpos_query_expenses(glob_msg_stru *pub_data_stru) {
+    ICS_DEBUG(0);
+    char buf[256],pos_name[256+1],deposit_no[20],flag,tmp[256];
+    int len,amount=0,sum=0;
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    len = _get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3E"),
+                               pub_data_stru->in_msg_type, buf, 0,sizeof(buf)-1);
+    if(0 > len) { //没有查询类信息
+        strcpy(pub_data_stru->center_result_code,"30");
+        dcs_log(0,0,"at %s(%s:%d) 没有3E信息",__FUNCTION__,__FILE__,__LINE__);
+        return 1;
+    }
+    buf[len]=0x00;
+    len = _get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "09"),
+                               pub_data_stru->in_msg_type, deposit_no, 0,sizeof(deposit_no)-1);
+    if(0 > len) { //没有查询类信息
+        strcpy(pub_data_stru->center_result_code,"30");
+        dcs_log(0,0,"at %s(%s:%d) 没有09信息",__FUNCTION__,__FILE__,__LINE__);
+        return 1;
+    }
+    deposit_no[len]=0x00;
+
+    if(buf[0] !='1' && buf[0] !='2' && buf[0] !='3' && buf[0] !='4') { // 费用类型判断
+        strcpy(pub_data_stru->center_result_code,"30");
+        dcs_log(0,0,"at %s(%s:%d) 费用类型不能判断buf=[%s]",__FUNCTION__,__FILE__,__LINE__,buf);
+        return 1;
+    }
+    flag=buf[0];
+
+    if(flag=='1')
+        exec sql select  pos_name,amount into :pos_name,:amount from view_deposit_foregift where deposit_no = :deposit_no;
+        else
+            exec sql select  pos_name,amount into :pos_name,:amount from view_expense_bill where expense_no = :deposit_no and type=:flag;
+            if(sqlca.sqlcode ==1403) { // 没有找到记录
+                strcpy_s(pub_data_stru->center_result_code,"03",sizeof(pub_data_stru->center_result_code));
+                dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, expense_no=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,deposit_no);
+                return 1;
+            } else if(sqlca.sqlcode !=0) { // 数据库故障
+                dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select  table error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+                strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
+                return 1;
+            }
+    rtrim(deposit_no);
+//  rtrim(pos_name);
+    dcs_debug(0,0,"at %s(%s:%d)  deposit_no=[%s] ",__FUNCTION__,__FILE__,__LINE__,deposit_no);
+    exec sql select sum(amount) into :sum from expenses_detail where deposit_no = :deposit_no;
+    if(sqlca.sqlcode != 0 && sqlca.sqlcode !=1403) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, select  expenses_detail error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
+
+        return 1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  amount=%d,sum=%d",__FUNCTION__,__FILE__,__LINE__,amount*100,sum);
+    sprintf(buf,"%012d",amount*100-sum);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT, pub_data_stru->route_msg_type, 12, buf, 1); //设置返回的押金金额
+    rtrim(pos_name);
+    if(flag =='1')
+        snprintf(buf,sizeof(buf),"押金-%s",pos_name);
+    else if(flag =='2')
+        snprintf(buf,sizeof(buf),"通信费-%s",pos_name);
+    else if(flag =='3')
+        snprintf(buf,sizeof(buf),"服务费-%s",pos_name);
+    else if(flag =='4')
+        snprintf(buf,sizeof(buf),"设备款-%s",pos_name);
+//  add_pub_field(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "09"), strlen(buf), buf, 1, NULL); //设置返回的账单名称
+    snprintf(tmp,sizeof(tmp),"3|03|0%s|04|107|52|0确认键继续...",buf);
+    format_echo_input(tmp, 0, pub_data_stru);
+    snprintf(buf,sizeof(buf),"%c%s",flag,deposit_no);
+    add_pub_field(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3D"),
+                  pub_data_stru->route_msg_type,strlen(buf), buf, 1); //设置返回的账单号
+    strcpy_s(pub_data_stru->center_result_code,"00",sizeof(pub_data_stru->center_result_code));
+    return 1;
+}
+/*
+  检查终端费用是否缴纳过
+*/
+int tpos_check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_stru) {
+    char buf[30],type[2],*p;
+    int len,sum=0,amount=0,i;
+    ICS_DEBUG(0);
+
+    dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
+    len = get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3D"),
+                              pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    if(len < 0) {
+        dcs_log(0, 0, "at %s(%s:%d) 不能读 3D 数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    buf[len]=0;
+    if(buf[0] !='1' && buf[0] !='2' && buf[0] !='3' && buf[0] !='4') {
+        dcs_log(0, 0, "at %s(%s:%d) 无法识别的缴费类型！buf[0]=%02x",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__, buf[0]);
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    type[0]=buf[0];
+    type[1]=0x00;
+    p=buf+1;
+    dcs_debug(0,0,"at %s(%s:%d)  bill_no=[%s] type=[%s]",__FUNCTION__,__FILE__,__LINE__,buf+1,type);
+    if(type[0] == '1') {
+        exec sql select  amount into :amount from view_deposit_foregift where deposit_no = :p;
+        if(sqlca.sqlcode != 0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  view_deposit_foregift error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
+            return -1;
+        }
+    } else {
+        exec sql select  amount into :amount from view_expense_bill where expense_no = :p;
+        if(sqlca.sqlcode != 0) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  view_expense_bill error !\n",
+                    __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
+            return -1;
+        }
+    }
+    exec sql select sum(amount) into :sum from expenses_detail where deposit_no = :p and type = :type;
+    if(sqlca.sqlcode != 0 && sqlca.sqlcode !=1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, select  expenses_detail error !\n",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    if(len < 0) {
+        dcs_log(0, 0, "at %s(%s:%d) 不能读 FIELD_AMOUNT数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
+        strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
+        return -1;
+    }
+    buf[len]=0x00;
+    for(i=len-1; i>=0; i--) {
+        if(buf[i] >='0' && buf[i] <='9') continue;
+        strcpy_s(pub_data_stru->center_result_code,"13",sizeof(pub_data_stru->center_result_code));
+        dcs_log(0,0,"at %s(%s:%d) 无效金额",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d)  amount=%d,sum=%d,buf=[%s]",__FUNCTION__,__FILE__,__LINE__,amount,sum,buf);
+    if((sum+atol(buf)) > amount*100) { // 金额过大
+        strcpy_s(pub_data_stru->center_result_code,"13",sizeof(pub_data_stru->center_result_code));
+        dcs_log(0,0,"at %s(%s:%d) 金额过大",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    return 1;
+}
+
+int tpos_count_trans(glob_msg_stru *pub_data_stru, char *psam,char *settle_time) {
+
+    char app_type[6],app_name[64],alias_name[6],tmp[512],tmp_names[512];
+    int amount_flag;
+    long cnt ,sum,n,num,offset = 0,names_offset=0, sum_count = 0, sum_amount=0;
+    if(pub_data_stru == NULL || psam == NULL || settle_time == NULL) return -1;
+
+
+    exec sql declare tpos_settle_cur cursor for
+       select a.app_type,a.cnt,a.amnt,b.app_name,b.alias_name,b.amount_flag from
+       (select app_type,count(*) cnt ,sum(amount_pay) amnt from translog
+               where last_time >to_date(:settle_time,'yyyymmddhh24miss') and acq_term_id1=:psam
+          and resp_cd_rcv='00' and void_flag='0'
+          and app_type in ( select app_type from settle_app_type)
+          group by app_type) a, settle_app_type b where a.app_type= b.app_type;
+    exec sql open  tpos_settle_cur;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, open tpos_settle_cur cursor fail!\n[%s] ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return -1;
+    }
+
+    bzero(tmp, sizeof(tmp));
+    bzero(tmp_names, sizeof(tmp_names));
+    n=0;
+    while(1) {
+        exec sql fetch tpos_settle_cur into :app_type,:cnt,:sum,:app_name,:alias_name,:amount_flag;
+        if(sqlca.sqlcode == 1403) {
+            //exec sql close  tpos_settle_cur;
+            break;
+        } else if(sqlca.sqlcode != 0) {
+            dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, fetch priv_def_num cursor fail!\n[%s] ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+            strcpy(pub_data_stru->center_result_code,"96");
+            exec sql close  tpos_settle_cur;
+            return -1;
+        } else {
+            // 拼入结算打印单
+            if(n == 0) {
+                num = snprintf(tmp+offset, sizeof(tmp)-offset, "类型 笔数 金额(元)\n");
+                offset += num;
+
+            }
+            rtrim(app_type);
+            rtrim(app_name);
+            rtrim(alias_name);
+            num = snprintf(tmp+offset, sizeof(tmp)-offset, "%-4s %4ld %14.2f\n", alias_name, cnt, amount_flag*sum/100.0);
+            if(num < 0 || num >= sizeof(tmp)-offset) {
+                dcs_log(0,0, "at %s(%s:%d) tmp is too small",__FUNCTION__,__FILE__,__LINE__);
+                strcpy(pub_data_stru->center_result_code,"96");
+                exec sql close  tpos_settle_cur;
+                return -1;
+            } else {
+                offset += num;
+            }
+
+            sum_count += cnt;
+            sum_amount += (amount_flag*sum);
+
+            num = snprintf(tmp_names+names_offset, sizeof(tmp_names)-names_offset, "%s%s ", app_name, alias_name);
+            names_offset += num;
+
+            n++;
+        }
+    }
+
+    exec sql close  tpos_settle_cur;
+
+    if(n == 0) {
+        //snprintf(tmp, sizeof(tmp), "暂无统计数据\n");
+        dcs_log(0,0,"at %s(%s:%d) no data found",__FUNCTION__,__FILE__,__LINE__);
+        strcpy(pub_data_stru->center_result_code,"TZ6");
+        return 1;
+    } else {
+        num = snprintf(tmp+offset, sizeof(tmp)-offset, "%-4s %4ld %14.2f\n", "汇总", sum_count, sum_amount/100.0);
+        if(num < 0 || num >= sizeof(tmp)-offset) {
+            dcs_log(0,0, "at %s(%s:%d) tmp is too small",__FUNCTION__,__FILE__,__LINE__);
+            strcpy(pub_data_stru->center_result_code,"96");
+            return -1;
+        } else {
+            offset += num;
+        }
+        snprintf(tmp+offset, sizeof(tmp)-offset, "%s", tmp_names);
+    }
+
+    dcs_debug(0, 0, "at %s(%s:%d) [%s]",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__, tmp);
+    add_pub_field(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "2B"),
+                  pub_data_stru->route_msg_type, strlen(tmp), tmp, 1);
+
+    if(0>priv_field_conver(pub_data_stru)) {
+        dcs_log(0,0,"at %s(%s:%d) priv_field_conver fail!",__FUNCTION__,__FILE__,__LINE__);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return -1;
+    }
+
+    exec sql update tpos_info set last_settle_time = sysdate where psam = :psam;
+    if(sqlca.sqlcode != 0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info fail!\n[%s] ",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        strcpy(pub_data_stru->center_result_code,"96");
+        return -1;
+    }
+
+    exec sql commit;
+
+    strcpy(pub_data_stru->center_result_code,"00");
+
+    return 1;
+}
+
+int is_permit_update_menu(char * msg_type,char * func_code) {
+    char flag[2];
+
+    memset(flag,0,sizeof(flag));
+
+    exec sql select priv_flag into :flag from app_type where
+                     msg_type=:msg_type and app_key=:func_code;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT app_type Error",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return 0;
+    }
+    if(flag[0]== 0x31) return 1;
+    return 0;
+}
