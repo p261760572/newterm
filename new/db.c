@@ -3,8 +3,8 @@
 #include <assert.h>
 
 char *strcpy_s(char *dest, const char *src, size_t n) {
-	assert(dest != NULL);
-	assert(src != NULL);
+    assert(dest != NULL);
+    assert(src != NULL);
 
     if(n > 0) {
         strncpy(dest,src,n-1);

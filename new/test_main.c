@@ -11,15 +11,13 @@ GLOB_DEF gl_def_set;
 char gs_buffer[8192],gs_fold_name[40];
 int gs_len;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     int dont_daemon=0,o,num_childs=1,i;
     char buf[128];
 
-    if(0 > OpenLog(argv[0])) /* 创建日志文件 */
-    {
-    	fprintf(stderr,"open log file [%s] fail!",argv[0]);
-    	exit(1);
+    if(0 > OpenLog(argv[0])) { /* 创建日志文件 */
+        fprintf(stderr,"open log file [%s] fail!",argv[0]);
+        exit(1);
     }
 
     g_pcBcdaShmPtr = NULL;
@@ -29,11 +27,10 @@ int main(int argc, char *argv[])
 
 
 
-static int OpenLog(char *IDENT)
-{
+static int OpenLog(char *IDENT) {
     char logfile[256],tmp[128];
-    
- 
+
+
     sprintf(tmp,"log/%s.log",IDENT);
     if(u_fabricatefile(tmp,logfile,sizeof(logfile)) < 0)
         return -1;
