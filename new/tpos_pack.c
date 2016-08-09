@@ -36,7 +36,7 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size)
   
  len1 =0;
  //设置报文头
- 
+ memset(data_buf, 0 , sizeof(data_buf));
  func_code[0]=0x00;
  get_field_data_safe(pub_data_stru,get_pub_field_id(msg_type,"FUNC_CODE"),
                      msg_type,func_code,sizeof(func_code));
@@ -205,13 +205,13 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size)
 	 if( pub_data_stru->out_cry_flag )
 	 {
 	 		for( i=0;i<n;)
-		   for( s=0;s<16;s++,i++)
+		   for( s=0;i<n&&s<16;s++,i++)
 		   tmp[s]=((unsigned char)tmp[s])^((unsigned char)data_buf[i]);
 	 }
 	 else
 	 {
 		 for( i=0;i<n;)
-		   for( s=0;s<8;s++,i++)
+		   for( s=0;i<n&&s<8;s++,i++)
 		   tmp[s]=((unsigned char)tmp[s])^((unsigned char)data_buf[i]);
 	 }
 

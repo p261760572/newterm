@@ -2892,8 +2892,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru)
 						case 910: //上送金额
 						case 917: //扣款金额
 							fieldLen = get_field_data_safe(pub_data_stru,atoi(p), 
-							                               pub_data_stru->in_msg_type, 
-							                               fieldVal,sizeof(fieldVal));
+							                               DB_MSG_TYPE, fieldVal,sizeof(fieldVal));
 							if(fieldLen <=0) break;
 							fieldVal[fieldLen]=0x00;
 							if(fieldVal[0] >= '0' && fieldVal[0] <= '9')
@@ -2910,6 +2909,19 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru)
 								return -1;
 							}
 							memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen;
+							break;
+						case 907: //终端流水号
+							fieldLen = get_field_data_safe(pub_data_stru,atoi(p), 
+							                               DB_MSG_TYPE, fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, fieldVal, fieldLen); len += fieldLen;
 							break;
 						case 61: // 持卡人信息
 							fieldLen = get_field_data_safe(pub_data_stru,61, 

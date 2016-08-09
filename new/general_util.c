@@ -815,7 +815,7 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 	char fieldVal[3 + 1], tmpBuf[3];
 	memset(fieldVal, 0, sizeof(fieldVal));
 
-	if(0 < get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,para), 
+	if(0 <= get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,para), 
 		                         pub_data_stru->in_msg_type, tmpBuf,2))
 	{
 		dcs_debug(tmpBuf,2,"<%s> FIELD_IC_DATA 2 ",__FUNCTION__);
@@ -825,12 +825,12 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 			memcpy(fieldVal, "02", 2); 
 		else memcpy(fieldVal, "07", 2); 
 	}
-	else if(0 < get_field_data_safe(pub_data_stru,FIELD_TRACK2, 
+	else if(0 <= get_field_data_safe(pub_data_stru,FIELD_TRACK2, 
 		                              pub_data_stru->in_msg_type, tmpBuf,1))
 	{
 		memcpy(fieldVal, "02", 2); 
 	}
-	else if(0 < get_field_data_safe(pub_data_stru, FIELD_CARD_NO, 
+	else if(0 <= get_field_data_safe(pub_data_stru, FIELD_CARD_NO, 
 		                              pub_data_stru->in_msg_type,tmpBuf,1))
 	{
 		memcpy(fieldVal, "01", 2);
@@ -839,7 +839,7 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 	{
 		memcpy(fieldVal, "00", 2);
 	}
-	if(0 < get_field_data_safe(pub_data_stru,FIELD_PIN, 
+	if(0 <= get_field_data_safe(pub_data_stru,FIELD_PIN, 
 		                         pub_data_stru->route_msg_type, tmpBuf,1))
 	{
 		fieldVal[2] = '1';
@@ -1108,7 +1108,6 @@ int get_db_data(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		return 0;
 	}
 	fieldVal[fieldLen]=0x00;
-	dcs_log(0, 0, "at %s(%s:%d)name=%s id=%d value=%s len=%d",__func__, __FILE__, __LINE__, tmp, id, fieldVal, fieldLen);
 	p = my_split(p, ',',tmp, sizeof(tmp));
 	if(p != NULL)
 	{
@@ -3934,4 +3933,86 @@ int set_cry_flag(glob_msg_stru *pub_data_stru, int cry_flag){
 	set_in_cry_flag(pub_data_stru, cry_flag);
 	set_out_cry_flag(pub_data_stru, cry_flag);
 	return 1;
+}
+
+//TC上送
+//修改TPOS模式查询
+
+int tc_send(char *para, short flag, glob_msg_stru *pub_data_stru)
+{
+	char fieldVal[300 + 1];
+	struct  tm *time_tm;
+	time_t time_cl;
+	char tmp[64];
+	int ret, len;                                                   
+	tl_trans_log_def TransLog;
+	ICS_DEBUG(0);
+	memset(&TransLog, 0, sizeof(TransLog));
+	time(&time_cl) ;                                                   
+	time_tm = localtime(&time_cl);                                      
+	strftime(tmp, 64, "%Y%m%d%H%M%S", time_tm);  
+//	memset(fieldVal, 0, sizeof(fieldVal));
+	if(memcmp(pub_data_stru->in_msg_type, "TPOS", 4))
+	{
+		len = get_field_data_safe(pub_data_stru, FIELD_ORG_TRANS_INFO, 
+																pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal));
+		if(len < 0)
+		{
+			strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
+		 	dcs_log(0, 0, "<FILE:%s,LINE:%d %s>读原交易信息数据不正确[%d]-[%d]！", __FILE__, __LINE__,__FUNCTION__, FIELD_ORG_TRANS_INFO, len);
+			return -1;
+		}
+		fieldVal[len]=0x00;
+		memcpy(TransLog.sys_date, tmp, 8);
+		memcpy(TransLog.acq_date, fieldVal, 4);
+		memcpy(TransLog.acq_tra_no, fieldVal + 4, 6);
+		memcpy(TransLog.acq_term_id1, fieldVal + 10, 20);
+		memcpy(TransLog.acq_term_id2, fieldVal + 30, 20);
+		len=get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, 
+															pub_data_stru->in_msg_type, TransLog.acq_insti_code,9);
+		ret = select_translog(&TransLog);
+		if(ret < 0) return -1;
+		rtrim(TransLog.resp_cd_rcv);
+		if(ret > 0)
+		{
+
+      if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+			return 1;
+		}
+		else
+		{
+			strcpy(pub_data_stru->center_result_code, ret == 1 ? CODE_PROCESSING : CODE_INVALID_TRANS);
+			return -1;
+		}
+	}
+	else
+	{
+		if(11 >= (len = get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3B"), 
+																					pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal))))
+		{
+			strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
+			return -1;
+		}
+		bcd_to_asc((unsigned char *)TransLog.acq_tra_no, (unsigned char *)fieldVal, 6, 0);
+		bcd_to_asc((unsigned char *)TransLog.acq_mac, (unsigned char *)(fieldVal + 3), 16, 0);
+		add_pub_field(pub_data_stru, FIELD_IC_DATA, pub_data_stru->in_msg_type, len - 11, fieldVal + 11, 1);
+		get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
+		ret = select_old_tpos_log(&TransLog);
+		if(0 > ret)
+		{
+			dcs_log(fieldVal, len, "<%s>can not found old  record",__FUNCTION__);
+			return -1;
+		}
+		if(ret > 0)
+		{
+			if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+			return 1;
+		}
+		else
+		{
+			strcpy(pub_data_stru->center_result_code, ret == 1 ? CODE_PROCESSING : CODE_INVALID_TRANS);
+			return -1;
+		}
+	}
+ return 1;
 }

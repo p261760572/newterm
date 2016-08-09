@@ -44,6 +44,7 @@ FLDSET_DEF gl_check_limit[]={         //转接交易检测处理函数
 	{"ZPOS_FIELD_PRE_CONV",zpos_field_pre_conv},
 	{"VERIFY_PASSWD",verify_passwd},
 	{"IS_VALID_CARDBIN",is_valid_cardbin},
+	{"TC_SEND",tc_send},
 	{"",NULL}
 };
 struct DEFAULT_PROC gl_direct_limit[]={ //直接应答交易检测处理函数
