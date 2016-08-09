@@ -131,7 +131,7 @@ int tpos_add_result_disp(glob_msg_stru *pub_data_stru) {
 
     if(0<(i=get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->route_msg_type,
                                 "22"),pub_data_stru->route_msg_type,
-                                tmp1,sizeof(tmp1)-1))) {
+                                tmp1,sizeof(tmp1)))) {
         tmp1[1]=get_delay_time(pub_data_stru->route_trans_type);
         update_pub_field(pub_data_stru,
                          get_pub_field_id(pub_data_stru->route_msg_type,"22"),
@@ -1384,7 +1384,7 @@ int tpos_query_expenses(glob_msg_stru *pub_data_stru) {
     int len,amount=0,sum=0;
     dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
     len = _get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3E"),
-                               pub_data_stru->in_msg_type, buf, 0,sizeof(buf)-1);
+                               pub_data_stru->in_msg_type, buf, 0,sizeof(buf));
     if(0 > len) { //没有查询类信息
         strcpy(pub_data_stru->center_result_code,"30");
         dcs_log(0,0,"at %s(%s:%d) 没有3E信息",__FUNCTION__,__FILE__,__LINE__);
@@ -1392,7 +1392,7 @@ int tpos_query_expenses(glob_msg_stru *pub_data_stru) {
     }
     buf[len]=0x00;
     len = _get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "09"),
-                               pub_data_stru->in_msg_type, deposit_no, 0,sizeof(deposit_no)-1);
+                               pub_data_stru->in_msg_type, deposit_no, 0,sizeof(deposit_no));
     if(0 > len) { //没有查询类信息
         strcpy(pub_data_stru->center_result_code,"30");
         dcs_log(0,0,"at %s(%s:%d) 没有09信息",__FUNCTION__,__FILE__,__LINE__);
@@ -1461,7 +1461,7 @@ int tpos_check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_s
 
     dcs_debug(0,0,"at %s(%s:%d)  begin",__FUNCTION__,__FILE__,__LINE__);
     len = get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3D"),
-                              pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+                              pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
         dcs_log(0, 0, "at %s(%s:%d) 不能读 3D 数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
@@ -1499,7 +1499,7 @@ int tpos_check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_s
         strcpy_s(pub_data_stru->center_result_code,"96",sizeof(pub_data_stru->center_result_code));
         return -1;
     }
-    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
         dcs_log(0, 0, "at %s(%s:%d) 不能读 FIELD_AMOUNT数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));

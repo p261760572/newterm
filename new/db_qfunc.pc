@@ -100,7 +100,7 @@ int end_proc(glob_msg_stru *pub_data_stru) {
     ICS_DEBUG(0);
     memset(acq_code,0,sizeof(acq_code));
     if(0 > _get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type,
-                                acq_code, 0,sizeof(acq_code)-1)) return -1;
+                                acq_code, 0,sizeof(acq_code))) return -1;
     if(0 > E2E(pub_data_stru->insti_code, acq_code, pub_data_stru->center_result_code, 5)) return -1;
     EXEC SQL SELECT PROC_NAME INTO :proc_name FROM END_PROC WHERE MSG_TYPE = :pub_data_stru->in_msg_type and TRANS_TYPE = :pub_data_stru->in_trans_type;
     if(sqlca.sqlcode == 1403) {
@@ -462,7 +462,6 @@ int get_easy_route(glob_msg_stru * pub_data_stru) {
     char insti_code_bak[11 + 1]; //备份路由机构
     char flag [1 + 1]; //0：关闭，1：默认路由机构，2：备份路由机构
     ICS_DEBUG(0);
-
     EXEC SQL SELECT INSTI_CODE, INSTI_CODE_BAK, FLAG INTO :insti_code, :insti_code_bak, :flag FROM EASY_ROUTE
        WHERE APP_TYPE = :pub_data_stru->app_type AND STEP = :pub_data_stru->route_num;
 //  if(sqlca.sqlcode == 1403)return 0;
@@ -507,9 +506,9 @@ int get_easy_route(glob_msg_stru * pub_data_stru) {
         case '3':
             if(!pub_data_stru->req_flag) {
                 _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                                     pub_data_stru->in_msg_type, pub_data_stru->route_insti_code, 2,8);
+                                     DB_MSG_TYPE, pub_data_stru->route_insti_code, 2,9);
                 _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
-                                     pub_data_stru->in_msg_type, pub_data_stru->route_trans_type, 2,4);
+                                     DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,5);
             } else {
                 strcpy_s(pub_data_stru->route_insti_code, pub_data_stru->insti_code, sizeof(pub_data_stru->route_insti_code));
                 strcpy_s(pub_data_stru->route_trans_type, pub_data_stru->in_trans_type, sizeof(pub_data_stru->route_trans_type));
@@ -622,8 +621,8 @@ int get_terminal_class(char *t_class, glob_msg_stru *pub_data_stru) {
     memset(term_id1, 0, sizeof(term_id1));
     memset(term_id2, 0, sizeof(term_id2));
     memset(term_class,0,sizeof(term_class));
-    if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,16))
-        get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id1,16);
+    if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,17))
+        get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id1,17);
 //  get_field_data(FIELD_TERM_ID2, pub_data_stru, term_id2);
 
     EXEC SQL SELECT TERM_CLASS INTO :term_class FROM TERM_ROUTE_CLASS WHERE TERM_ID1= :term_id1 AND APP_TYPE = :pub_data_stru->app_type;
@@ -790,7 +789,7 @@ int get_route_trans_set(glob_msg_stru * pub_data_stru) {
     if(strcmp(pub_data_stru->route_msg_type,"TPOS") ==0) {
         char tmp[4];
         if(0>=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
-                                  pub_data_stru->route_msg_type,tmp,sizeof(tmp)-1))
+                                  pub_data_stru->route_msg_type,tmp,sizeof(tmp)))
             add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
                           pub_data_stru->route_msg_type, strlen(field_db),field_db,1);
         else
@@ -803,7 +802,7 @@ int get_route_trans_set(glob_msg_stru * pub_data_stru) {
     if(pub_data_stru->req_flag!=1 && pub_data_stru->route_is_check_mac && pub_data_stru->route_insti_work_type) { //获取终端模式密钥
 //      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> 8",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__);
         for(i=0; gl_terminfo_qproc[i].name !=NULL; i++) {
-            dcs_debug(0,0,"at %s(%s:%d) , <%s> 8 %d",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,i);
+            dcs_debug(0,0,"at %s(%s:%d) , %d",__FUNCTION__,__FILE__,__LINE__,i);
             if(strcmp(pub_data_stru->route_msg_type,gl_terminfo_qproc[i].name)==0)
                 return gl_terminfo_qproc[i].func(pub_data_stru);
         }
@@ -924,7 +923,7 @@ int check_direct_limit(glob_msg_stru *pub_data_stru) {
                         exec sql close check_direct_limit;
                         return -1;
                     }
-                    dcs_debug(0,0,"at %s(%s:%d), <%s> name=[%s] succ",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,name);
+                    dcs_debug(0,0,"at %s(%s:%d), name=[%s] succ",__FUNCTION__,__FILE__,__LINE__,name);
                 }
         } else {
             dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, fetch check_direct_limit cursor error !\n msg_type=[%s],app_type=[%s]",
@@ -966,7 +965,7 @@ int get_default(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     rtrim(para);
 
     _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "PAY_TRANS_TYPE"),
-                         DB_MSG_TYPE, trans_type, 2,4);
+                         DB_MSG_TYPE, trans_type, 2,5);
     //if(len >0)trans_type[len]=0x00;
 
     EXEC SQL SELECT DATA INTO :data FROM TRANS_FIELD_DEFAULT
@@ -1117,13 +1116,13 @@ int priv_field_conver(glob_msg_stru * pub_data_stru) {
         i=priv_field_conver_handle(handle, para, fldid, pub_data_stru);
         if(0 > i) {
             EXEC SQL CLOSE PRIV_FIELD_CONVER_CUR;
-            dcs_debug(0,0,"at %s(%s:%d), [%s]err end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle);
+            dcs_debug(0,0,"at %s(%s:%d), [%s]err end",__FUNCTION__,__FILE__,__LINE__,handle);
             return -1;
         } else if(0==i) {
-            dcs_debug(0,0,"at %s(%s:%d), [%s] fault end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle);
+            dcs_debug(0,0,"at %s(%s:%d), [%s] fault end",__FUNCTION__,__FILE__,__LINE__,handle);
             continue;
         }
-        dcs_debug(0,0,"at %s(%s:%d), [%s][%s] end",__FUNCTION__,__FILE__,__LINE__,__FUNCTION__,handle, para);
+        dcs_debug(0,0,"at %s(%s:%d), [%s][%s] end",__FUNCTION__,__FILE__,__LINE__,handle, para);
     }
     EXEC SQL CLOSE PRIV_FIELD_CONVER_CUR;
     dcs_debug(0,0,"at %s(%s:%d), end",__FUNCTION__,__FILE__,__LINE__);
@@ -1161,7 +1160,7 @@ int special_business_handle(glob_msg_stru * pub_data_stru) {
         rtrim(para);
         if(0 > special_business(handle, para, 0, pub_data_stru)) {
             EXEC SQL CLOSE SPECIAL_BUSINESS_HANDLE_CUR;
-            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, <%s> handle=[%s] para=[%s] proc fail!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,handle,para);
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, handle=[%s] para=[%s] proc fail!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,handle,para);
             return -1;
         }
     }
@@ -1242,9 +1241,9 @@ int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
                              pub_data_stru->in_msg_type, in_term_id2, 2,17);
     } else {
         if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type,
-                                  in_term_id1,sizeof(in_term_id1)-1))
+                                  in_term_id1,sizeof(in_term_id1)))
             get_field_data_safe(pub_data_stru, 20, pub_data_stru->in_msg_type, in_term_id1,17);
-        get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, in_term_id2,sizeof(in_term_id2)-1);
+        get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, in_term_id2,sizeof(in_term_id2));
     }
     rtrim(in_term_id1);
     rtrim(in_term_id2);
@@ -1602,7 +1601,7 @@ int check_and_match(glob_msg_stru *pub_data_stru) { //检查应答信息，并与原交易匹
     ICS_DEBUG(0);
     memset(acq_code,0,sizeof(acq_code));
     if(0 > _get_field_data_safe(pub_data_stru,FIELD_RECODE, pub_data_stru->in_msg_type,
-                                acq_code, 0,sizeof(acq_code)-1))
+                                acq_code, 0,sizeof(acq_code)))
         return -1;
     if(0 > E2E(pub_data_stru->insti_code, acq_code, pub_data_stru->center_result_code, 5)) return -1;
     dcs_debug(0,0,"at %s(%s:%d), center ret_code=%s",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->center_result_code);
@@ -1745,34 +1744,34 @@ int db_genrate_query(glob_msg_stru *pub_data_stru) {
     strcpy_s(TransLog.sys_date, tmp, sizeof(TransLog.sys_date));
     p=my_split(p, ',',tmp,sizeof(tmp));
     if(p == NULL) {
-        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 3失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 3失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
 
     strcpy_s(TransLog.acq_insti_code, tmp, sizeof(TransLog.acq_insti_code));
     p=my_split(p, ',',tmp,sizeof(tmp));
     if(p == NULL) {
-        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 4失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 4失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
 
     strcpy_s(TransLog.acq_tra_no, tmp, sizeof(TransLog.acq_tra_no));
     p=my_split(p, ',',tmp,sizeof(tmp));
     if(p == NULL) {
-        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 5失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 5失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
 
     strcpy_s(TransLog.acq_date, tmp, sizeof(TransLog.acq_date));
     p=my_split(p, ',',tmp,sizeof(tmp));
     if(p == NULL) {
-        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 6失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 6失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
     strcpy_s(TransLog.acq_term_id1, tmp, sizeof(TransLog.acq_term_id1));
     p=my_split(p, ',',tmp,sizeof(tmp));
     if(p == NULL) {
-        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 7失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, __FILE__, __LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, 解析 msgkey 7失败！",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
     strcpy_s(TransLog.acq_term_id2, tmp, sizeof(TransLog.acq_term_id2));
@@ -1980,8 +1979,8 @@ int get_term_trans_control(char *creditflag, int *credit_card, int *credit_d_a, 
 
     memset(term_id1, 0, sizeof(term_id1));
     memset(term_id2, 0, sizeof(term_id2));
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,sizeof(term_id1)-1);
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, term_id2,sizeof(term_id2)-1);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, term_id1,sizeof(term_id1));
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, term_id2,sizeof(term_id2));
     if(term_id1[0] == 0) strcpy(term_id1, "NULL");
     if(term_id2[0] == 0) strcpy(term_id2, "NULL");
     strcpy_s(tapp_type,pub_data_stru->app_type,sizeof(tapp_type));
@@ -2083,7 +2082,7 @@ int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
     memset(route_msg_type, 0, sizeof(route_msg_type));
 
     if(0 >(len= _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "APP_TYPE"),
-                                     DB_MSG_TYPE, app_type, 2,4))) {
+                                     DB_MSG_TYPE, app_type, 2,5))) {
         dcs_log(0, 0, "at %s(%s:%d), 取APP_TYPE失败",__FUNCTION__,__FILE__,__LINE__);
         return -1;
     }
@@ -2105,7 +2104,7 @@ int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
         if(0 > (len=_get_field_data_safe(pub_data_stru,
                                          get_pub_field_id(DB_MSG_TYPE,transflag[0] == '1' ?
                                                  "APP_TRANS_TYPE" : "PAY_TRANS_TYPE"),
-                                         DB_MSG_TYPE, route_trans_type, 2,4))) {
+                                         DB_MSG_TYPE, route_trans_type, 2,5))) {
             dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__,transflag[0] == '1' ? "APP_TRANS_TYPE" : "PAY_TRANS_TYPE");
             return -1;
         }
@@ -2113,7 +2112,7 @@ int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
         if(0 >(len= _get_field_data_safe(pub_data_stru,
                                          get_pub_field_id(DB_MSG_TYPE, transflag[0] == '1' ?
                                                  "APP_INSTI_CODE" : "PAY_INSTI_CODE"),
-                                         DB_MSG_TYPE, pub_data_stru->route_insti_code, 2,8))) {
+                                         DB_MSG_TYPE, pub_data_stru->route_insti_code, 2,9))) {
             dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__,transflag[0] == '1' ? "APP_INSTI_CODE" : "PAY_INSTI_CODE");
             return -1;
         }
@@ -2121,7 +2120,7 @@ int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
         if(0 >(len= _get_field_data_safe(pub_data_stru,
                                          get_pub_field_id(DB_MSG_TYPE, transflag[0] == '1' ?
                                                  "APP_MSG_TYPE" : "PAY_MSG_TYPE"),
-                                         DB_MSG_TYPE, route_msg_type, 2,4))) {
+                                         DB_MSG_TYPE, route_msg_type, 2,5))) {
             dcs_log(0, 0, "at %s(%s:%d), 取%s失败",__FUNCTION__,__FILE__,__LINE__, transflag[0] == '1' ? "APP_MSG_TYPE" : "PAY_MSG_TYPE");
             return -1;
         }
@@ -2142,12 +2141,12 @@ int GetTimeoutTrans(glob_msg_stru *pub_data_stru) {
 int get_end_trans(char *para, short flag, glob_msg_stru *pub_data_stru) {
     tl_trans_log_def TransLog;
     if(0 > get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "44"),
-                               pub_data_stru->in_msg_type, TransLog.rcv_acct_no,sizeof(TransLog.rcv_acct_no)-1)) {
+                               pub_data_stru->in_msg_type, TransLog.rcv_acct_no,sizeof(TransLog.rcv_acct_no))) {
         dcs_log(0, 0, "at %s(%s:%d), 取收款数据域[%s]出错！",__FUNCTION__,__FILE__,__LINE__, "44");
         return -1;
     }
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,16);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,17);
     if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
     if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
 
@@ -2291,12 +2290,12 @@ int get_end_trans(char *para, short flag, glob_msg_stru *pub_data_stru) {
 int end_trans(glob_msg_stru *pub_data_stru) {
     tl_trans_log_def TransLog;
     if(0 > get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "44"),
-                               pub_data_stru->in_msg_type, TransLog.pay_acct_no,sizeof(TransLog.pay_acct_no)-1)) {
+                               pub_data_stru->in_msg_type, TransLog.pay_acct_no,sizeof(TransLog.pay_acct_no))) {
         dcs_log(0, 0, "at %s(%s:%d), 取付款数据域[%s]出错！",__FUNCTION__,__FILE__,__LINE__, "44");
         return -1;
     }
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
-    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,16);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
+    get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,17);
     if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
     if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
 
@@ -2483,13 +2482,13 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
         rtrim(data_fld);
 //      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> dbmg_fld=%s,data_fld=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,dbmg_fld,data_fld);
         if(0 > (d_fldid = get_pub_field_id(DB_MSG_TYPE, dbmg_fld))) {
-            dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]-[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__,__FILE__, __LINE__, DB_MSG_TYPE, dbmg_fld);
+            dcs_log(0, 0, "at %s(%s:%d), 取数据库[%s]-[%s]ID失败！",__FUNCTION__,__FILE__,__LINE__,DB_MSG_TYPE, dbmg_fld);
             EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
             return -1;
         }
         fld_def = get_priv_field_def_for_id(d_fldid, priv_def);
         if(fld_def == NULL) {
-            dcs_log(0, 0, "at %s(%s:%d), get_priv_field_def_for_id[%s:%d]失败！",__FUNCTION__,__FILE__,__LINE__,__FILE__, __LINE__, dbmg_fld, d_fldid);
+            dcs_log(0, 0, "at %s(%s:%d), get_priv_field_def_for_id[%s:%d]失败！",__FUNCTION__,__FILE__,__LINE__,dbmg_fld, d_fldid);
             return -1;
         }
 //      dcs_debug(0,0,"at %s(%s:%d) sqlcode=%d, <%s> dbmg_flg=[%s],data_flg=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,__FUNCTION__,dbmg_fld,data_fld);
@@ -2535,7 +2534,7 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
             EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
             return -1;
         }
-        ret = _get_field_data_safe(pub_data_stru, fldid, p, fieldVal, data_from,sizeof(fieldVal)-1);
+        ret = _get_field_data_safe(pub_data_stru, fldid, p, fieldVal, data_from,sizeof(fieldVal));
         if(0 > ret) {
             dcs_debug(0,0,"at %s(%s:%d), get_field_data[%d] no data ,from=%d",__FUNCTION__,__FILE__,__LINE__,fldid,data_from);
             continue;
@@ -2548,7 +2547,7 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
             strcpy_s(fieldAsc, fieldVal, sizeof(fieldAsc));
 
         memset(addData, 0, sizeof(addData));
-        ret=_get_field_data_safe(pub_data_stru,s_fldid, DB_MSG_TYPE, addData, 2,sizeof(addData)-1);
+        ret=_get_field_data_safe(pub_data_stru,s_fldid, DB_MSG_TYPE, addData, 2,sizeof(addData));
         //if(ret >0) addData[ret]=0x00;
         //else addData[0]=0x00;
         dcs_debug(0,0,"at %s(%s:%d), addData[%s]fieldAsc=[%d][%s]",__FUNCTION__,__FILE__,__LINE__,addData,strlen(fieldAsc),fieldAsc);
@@ -2597,7 +2596,7 @@ int trans_end_notify(glob_msg_stru *pub_data_stru) { //交易结束后的通知业务处理
         }
     }
 
-    dcs_log(0,0,"at %s(%s:%d), <%s>处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
+    dcs_log(0,0,"at %s(%s:%d)处理函数[%s]未找到!",__FUNCTION__,__FILE__,__LINE__, handle);
     return -1;
 
 }
@@ -2642,7 +2641,7 @@ int query_expenses(glob_msg_stru *pub_data_stru) {
     dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__);
 
     memset(buf, 0, sizeof(buf));
-    len = _get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf, 0,sizeof(buf)-1);
+    len = _get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf, 0,sizeof(buf));
     if(0 > len) { //没有查询类信息
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
         dcs_log(0,0,"at %s(%s:%d), 没有查询类信息",__FUNCTION__,__FILE__,__LINE__);
@@ -2711,7 +2710,7 @@ int check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_stru) 
 
     dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__);
     memset(buf, 0, sizeof(buf));
-    len = get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    len = get_field_data_safe(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
         dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, FIELD_INFO, len);
         strcpy(pub_data_stru->center_result_code,"30");
@@ -2724,7 +2723,7 @@ int check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_stru) 
         return -1;
     }
     memset(buf, 0, sizeof(buf));
-    len = get_field_data_safe(pub_data_stru, 44, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    len = get_field_data_safe(pub_data_stru, 44, pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
         dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, 44, len);
         strcpy(pub_data_stru->center_result_code,"30");
@@ -2747,7 +2746,7 @@ int check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_stru) 
     }
 
     memset(buf, 0, sizeof(buf));
-    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf)-1);
+    len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
         dcs_log(0, 0, "at %s(%s:%d), 读交易信息数据不正确[%d]-[%d]！",__FUNCTION__,__FILE__,__LINE__, 4, len);
         strcpy(pub_data_stru->center_result_code,"30");
@@ -2816,14 +2815,14 @@ int verify_passwd(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char pwd[30],term_id[20],tmp[30];
     int len;
     if(0 > (len=get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "08"),
-                                    pub_data_stru->in_msg_type, pwd,sizeof(pwd)-1))) {
+                                    pub_data_stru->in_msg_type, pwd,sizeof(pwd)))) {
         dcs_log(0, 0, "at %s(%s:%d), 取管理员密码[08]出错！",__FUNCTION__,__FILE__,__LINE__);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
         return -1;
     }
     pwd[len]=0x00;
     if(pub_data_stru->insti_work_type) {
-        if(0 > (len=get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id,sizeof(term_id)-1))) {
+        if(0 > (len=get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, term_id,sizeof(term_id)))) {
             dcs_log(0, 0, "at %s(%s:%d), 取管理员密码[08]出错！",__FUNCTION__,__FILE__,__LINE__);
             strcpy(pub_data_stru->center_result_code,"30");
             return -1;
@@ -2905,7 +2904,7 @@ int is_valid_cardbin(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         return -1;
 
     memset(cardno, 0, sizeof(cardno));
-    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno));
     if(i<=0) return -1;
     //cardno[i]=0x00;
     rtrim(para);
@@ -2941,7 +2940,7 @@ int check_cardbin(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     card_type[1]=0x00;
     insti_code[0][0]=0x00;
     memset(cardno, 0, sizeof(cardno));
-    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    i = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno));
     if(i<=0)
         return -1;
     //cardno[i]=0x00;
@@ -3077,7 +3076,7 @@ int check_valid_date(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char psam_no[20];
     int n;
     dcs_debug(0,0,"at %s(%s:%d), begin",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
-    n = get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, psam_no,sizeof(psam_no)-1);
+    n = get_field_data_safe(pub_data_stru, FIELD_PSAM_NO, pub_data_stru->in_msg_type, psam_no,sizeof(psam_no));
     if(n<=0) {
         dcs_log(0,0,"at %s(%s:%d), get_field_data_safe FIELD_PSAM_NO fail! ",__FUNCTION__,__FILE__,__LINE__);
         return -1;
@@ -3101,7 +3100,7 @@ int check_valid_date(char *para, short fldid, glob_msg_stru *pub_data_stru) {
 int check_cntuser_curdate(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char cardno[30];
     int n,cnt;
-    n = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno)-1);
+    n = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, cardno,sizeof(cardno));
     if(n<=0) return -1;
     cardno[n]=0x00;
     if(para == NULL) {

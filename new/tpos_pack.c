@@ -391,7 +391,6 @@ int tpos_pub_to_priv(short id ,const char *msg_type,const field_define *p_def,
 			  		n =n+2;
 			  }
 			  
-			  dcs_log(tmp_buf, n, "pzpzpz\nget%d", n);
 			  disp_len += snprintf(disp_buf+disp_len,sizeof(disp_buf)-disp_len,
 			              "field[%s]=[%d][%s]\n",p_def->name,n,tmp_buf);
 			  return n;

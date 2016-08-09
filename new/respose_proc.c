@@ -52,7 +52,7 @@
   {
 	 	memset(acq_insti_code, 0, sizeof(acq_insti_code));
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-													pub_data_stru->in_msg_type, acq_insti_code, 2,8);
+													DB_MSG_TYPE, acq_insti_code, 2,9);
 		snprintf(pub_data_stru->route_insti_code,9,"%s", acq_insti_code);
 		dcs_debug(0,0,"<%s> return src acq_insti_code=[%s]",__FUNCTION__,acq_insti_code);
   } 
@@ -65,6 +65,7 @@
 			 return reply_acq(pub_data_stru);
 		}
   }
+  
 	if(0 > get_route_insti_info(pub_data_stru)) //获取路由机构信息 
 	{
 //		if(pub_data_stru->switch_src_flag)

@@ -840,7 +840,7 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 		memcpy(fieldVal, "00", 2);
 	}
 	if(0 < get_field_data_safe(pub_data_stru,FIELD_PIN, 
-		                         pub_data_stru->in_msg_type, tmpBuf,1))
+		                         pub_data_stru->route_msg_type, tmpBuf,1))
 	{
 		fieldVal[2] = '1';
 	}
@@ -1108,6 +1108,7 @@ int get_db_data(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		return 0;
 	}
 	fieldVal[fieldLen]=0x00;
+	dcs_log(0, 0, "at %s(%s:%d)name=%s id=%d value=%s len=%d",__func__, __FILE__, __LINE__, tmp, id, fieldVal, fieldLen);
 	p = my_split(p, ',',tmp, sizeof(tmp));
 	if(p != NULL)
 	{
@@ -1148,7 +1149,7 @@ int get_db_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		else if( p)
 		{
 			i=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, tmp),  
-			                      DB_MSG_TYPE,fieldVal,sizeof(fieldVal)-1);
+			                      DB_MSG_TYPE,fieldVal,sizeof(fieldVal));
 			if( i > 0 && (i+fieldLen) <1024) 
 			{
 				memcpy(tmpBuf+fieldLen,fieldVal,i);
@@ -1184,7 +1185,7 @@ int get_org_trans_info(char *para, short fldid, glob_msg_stru *pub_data_stru)
 			memset(fieldVal, 0, sizeof(fieldVal));
 			id=get_pub_field_id(DB_MSG_TYPE, tmp);
 			fieldLen = _get_field_data_safe(pub_data_stru,id,  DB_MSG_TYPE,
-			                                fieldVal, 2,sizeof(fieldVal)-1);
+			                                fieldVal, 2,sizeof(fieldVal));
 			if(0 >= fieldLen)
 			{
 				dcs_log(0, 0, "<%s>取数据库域[%s][%s]id=[%d]出错！", __FUNCTION__, DB_MSG_TYPE, tmp,id);
@@ -1418,7 +1419,7 @@ int pin_change(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		if(outPanFlag || inPanFlag)
 		{ 
 			l = get_field_data_safe(pub_data_stru,FIELD_CARD_NO,  pub_data_stru->in_msg_type,
-			                        tmpBuf,sizeof(tmpBuf)-1);
+			                        tmpBuf,sizeof(tmpBuf));
 			if(l < 13)
 			{
 				dcs_log(0, 0, "<%s>取[%d]域卡号信息失败! len[%d], tmpBuf[%s]",
@@ -1702,7 +1703,7 @@ int get_msg_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		{
 			i=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, tmp), 
 			                       pub_data_stru->in_msg_type,
-			                      fieldVal,sizeof(fieldVal)-1);
+			                      fieldVal,sizeof(fieldVal));
 			if( i > 0 && (i+fieldLen) <1024) 
 			{
 				memcpy(tmpBuf+fieldLen,fieldVal,i);
@@ -1728,7 +1729,7 @@ int get_msg_data_tlvfill(char *para, short fldid, glob_msg_stru *pub_data_stru)
 	
 	if( strcmp(pub_data_stru->in_msg_type,"TPOS")==0 &&
 		  (i=get_field_data_safe(pub_data_stru, get_pub_field_id("TPOS", "3E"),
-		                         pub_data_stru->in_msg_type,fieldVal,sizeof(fieldVal)-1)) >0)
+		                         pub_data_stru->in_msg_type,fieldVal,sizeof(fieldVal))) >0)
 	{
 		fieldVal[i]=0x00;
 		if( strcmp(fieldVal,"88880300")==0)
@@ -1916,7 +1917,7 @@ int check_amount(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		 p++;
 	}
 	i=get_field_data_safe(pub_data_stru, 917, pub_data_stru->in_msg_type,
-	                      amount,sizeof(amount)-1);
+	                      amount,sizeof(amount));
 	if( i <=0) return -1;
 	amount[i]=0x00;
 	if( atol(amount) < atol(para)) return -1;
@@ -2057,7 +2058,7 @@ int card_info_check(char *para, short flag, glob_msg_stru *pub_data_stru)
 	int i, l;
 	ICS_DEBUG(0);
 //	memset(tmpBuf, 0, sizeof(tmpBuf));
-	i=get_field_data_safe(pub_data_stru, POS_ENTRY_MD_CD, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)-1);
+	i=get_field_data_safe(pub_data_stru, POS_ENTRY_MD_CD, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf));
 	if( 0 > 0 ) tmpBuf[i]=0x00;
 	else
 	{	 
@@ -2068,7 +2069,7 @@ int card_info_check(char *para, short flag, glob_msg_stru *pub_data_stru)
 	if(memcmp(tmpBuf, "02", 2) == 0) //刷卡交易
 	{
 //		memset(tmpBuf, 0, sizeof(tmpBuf));
-		l = get_field_data_safe(pub_data_stru, FIELD_TRACK2, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)-1);
+		l = get_field_data_safe(pub_data_stru, FIELD_TRACK2, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf));
 		if ( l >0)	tmpBuf[l]=0x00;
 		for(p = tmpBuf, i = 0; *p && *p != '=' && i < l; i++, p++);
 		if(i > 20 || *p != '=') 
@@ -2104,7 +2105,7 @@ int card_info_check(char *para, short flag, glob_msg_stru *pub_data_stru)
 		*p=0x00;
 		add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "55"), 
 										pub_data_stru->route_msg_type, strlen(tmpBuf), tmpBuf, 1);
-		if(0 < (l = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)-1)))
+		if(0 < (l = get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))))
 		{
 			add_pub_field(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type, l, tmpBuf, 1);
 		}
@@ -2151,7 +2152,7 @@ int trans_control(char *para, short flag, glob_msg_stru *pub_data_stru)
 	int debit_d_c_limit           ;
 	int ret;
 	int amount, addup_amount, addup_count;
-	if(0 >(ret= get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, cardno,sizeof(cardno)-1)))
+	if(0 >(ret= get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, cardno,sizeof(cardno))))
 	{
 		dcs_log(0, 0, "<FILE:%s,LINE:%d><%s>取卡号域[%d]出错！", __FILE__, __LINE__,__FUNCTION__, FIELD_CARD_NO);
 		return -1;
@@ -2164,7 +2165,7 @@ int trans_control(char *para, short flag, glob_msg_stru *pub_data_stru)
 		return -1;
 	}
 	card_attr[ret]=0x00;
-	if(0 >(ret= get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)-1)))
+	if(0 >(ret= get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))))
 	{
 		dcs_log(0, 0, "<FILE:%s,LINE:%d><%s>取金额域[%d]出错！", __FILE__, __LINE__, __FUNCTION__, FIELD_AMOUNT);
 		return -1;
@@ -2255,7 +2256,7 @@ int iso_check_mac_all_des(char *para, short flag, glob_msg_stru *pub_data_stru)
 	field_define *def;
 	ICS_DEBUG(0);
 	memset(inMacBuf, 0, sizeof(inMacBuf));
-	macLen = _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, inMacBuf, 0,sizeof(inMacBuf)-1);
+	macLen = _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, inMacBuf, 0,sizeof(inMacBuf));
 	if(macLen <= 0)
 	{
 		if(0 == strcmp(pub_data_stru->center_result_code, "00") || pub_data_stru->center_result_code[0] == 0)
@@ -2274,7 +2275,7 @@ int iso_check_mac_all_des(char *para, short flag, glob_msg_stru *pub_data_stru)
 			return -1;
 	}
 	if( def->is_compress ) macLen /=2;
-	headLen = _get_field_data_safe(pub_data_stru, FIELD_TPDU, pub_data_stru->in_msg_type, tmpBuf, 0,sizeof(tmpBuf)-1);
+	headLen = _get_field_data_safe(pub_data_stru, FIELD_TPDU, pub_data_stru->in_msg_type, tmpBuf, 0,sizeof(tmpBuf));
 	def=get_priv_field_def_for_id(FIELD_TPDU,match_priv_stru(pub_data_stru->in_msg_type,&gl_def_set));
   if( def ==  NULL )
   {
@@ -2546,13 +2547,13 @@ int trans_cancle(char *para, short flag, glob_msg_stru *pub_data_stru)
 	memcpy(TransLog.acq_tra_no, fieldVal + 4, 6);
 	memcpy(TransLog.acq_term_id1, fieldVal + 10, 20);
 	memcpy(TransLog.acq_term_id2, fieldVal + 30, 20);
-	get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, TransLog.acq_insti_code,8);
+	get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, TransLog.acq_insti_code,9);
 	ret = select_translog(&TransLog);
 	if(ret < 0) return -1;
 	rtrim(TransLog.resp_cd_rcv);
 	if(ret == 1 && memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0')
 	{
-		len=get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal)-1);
+		len=get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal));
 		if( len >0 ) fieldVal[len]=0x00;
 		else fieldVal[0]=0x00;
 		if(atol(fieldVal) != atol(TransLog.amount_pay))
@@ -2560,7 +2561,7 @@ int trans_cancle(char *para, short flag, glob_msg_stru *pub_data_stru)
 			strcpy(pub_data_stru->center_result_code, CODE_INVALID_TRANS);
 			return 1;
 		}
-		if( 0>(len=get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal)-1)))
+		if( 0>(len=get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal))))
 		{
 			fieldVal[len]=0x00;
 			rtrim(TransLog.pay_acct_no);
@@ -2612,17 +2613,17 @@ int reversed_replay(glob_msg_stru * pub_data_stru)
 */
       memset(&log,0,sizeof(log));
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"      ), 
-														pub_data_stru->route_msg_type, log.sys_date      , 2,8); 
+														pub_data_stru->route_msg_type, log.sys_date      , 2,9); 
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-														pub_data_stru->route_msg_type, log.acq_insti_code, 2,8); 
+														pub_data_stru->route_msg_type, log.acq_insti_code, 2,9); 
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"    ), 
-														pub_data_stru->route_msg_type, log.acq_tra_no    , 2,6); 
+														pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7); 
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"      ), 
 														pub_data_stru->route_msg_type, log.acq_date      , 2,8); 
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"  ), 
-														pub_data_stru->route_msg_type, log.acq_term_id1  , 2,16); 
+														pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17); 
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"  ), 
-														pub_data_stru->route_msg_type, log.acq_term_id2  , 2,16); 			
+														pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17); 			
 			update_db_voidflag(&log, '2', NULL);
 		
 	}
@@ -2649,17 +2650,17 @@ int find_replay(glob_msg_stru * pub_data_stru)
 		
       memset(&transLog,0,sizeof(transLog));
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"), 
-														pub_data_stru->route_msg_type, transLog.sys_date, 2,8);
+														pub_data_stru->route_msg_type, transLog.sys_date, 2,9);
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-														pub_data_stru->route_msg_type, transLog.acq_insti_code, 2,8);
+														pub_data_stru->route_msg_type, transLog.acq_insti_code, 2,9);
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"), 
-														pub_data_stru->route_msg_type, transLog.acq_tra_no, 2,6);
+														pub_data_stru->route_msg_type, transLog.acq_tra_no, 2,7);
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"), 
-														pub_data_stru->route_msg_type, transLog.acq_date, 2,8);
+														pub_data_stru->route_msg_type, transLog.acq_date, 2,9);
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
-														pub_data_stru->route_msg_type, transLog.acq_term_id1, 2,16);
+														pub_data_stru->route_msg_type, transLog.acq_term_id1, 2,17);
 			_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"), 
-														pub_data_stru->route_msg_type, transLog.acq_term_id2, 2,16);
+														pub_data_stru->route_msg_type, transLog.acq_term_id2, 2,17);
 			if(0 >= select_translog(&transLog)) return -1;
 			if(transLog.permit_void[0] == '1')
 			{		
@@ -2699,7 +2700,7 @@ int result_query_tl(glob_msg_stru * pub_data_stru)
 	flag=0x00;
 	memset(ret_code,0,sizeof(ret_code));
 	i=get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "121"), 
-												pub_data_stru->in_msg_type, tmp,sizeof(tmp)-1 );
+												pub_data_stru->in_msg_type, tmp,sizeof(tmp));
 	if( i > 0 )
 	{
 		tmp[i]=0x00;
@@ -2733,20 +2734,20 @@ int result_query_tl(glob_msg_stru * pub_data_stru)
 		}
 		memset(&log,0,sizeof(log));
 		i=_get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "15"), 
-														pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp)-1);
+														pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp));
 		if( i > 0 ) memcpy(log.qs_date,tmp,4);
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"      ), 
-													pub_data_stru->route_msg_type, log.sys_date      , 2,8); 
+													pub_data_stru->route_msg_type, log.sys_date      , 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-													pub_data_stru->route_msg_type, log.acq_insti_code, 2,8); 
+													pub_data_stru->route_msg_type, log.acq_insti_code, 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"    ), 
-													pub_data_stru->route_msg_type, log.acq_tra_no    , 2,6); 
+													pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"      ), 
-													pub_data_stru->route_msg_type, log.acq_date      , 2,8); 
+													pub_data_stru->route_msg_type, log.acq_date      , 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"  ), 
-													pub_data_stru->route_msg_type, log.acq_term_id1  , 2,16); 
+													pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"  ), 
-													pub_data_stru->route_msg_type, log.acq_term_id2  , 2,16); 			
+													pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17); 			
 		if ( 0>update_db_result_pay(&log,  ret_code))
 		{
 				if(0 < pub_data_stru->timeout_table.num--)
@@ -2796,20 +2797,20 @@ int result_query_hnyl(glob_msg_stru * pub_data_stru)
 		*/
 		memset(&log,0,sizeof(log));
 		i=_get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "15"), 
-														pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp)-1);
+														pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp));
 		if( i > 0 ) memcpy(log.qs_date,tmp,4);
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"      ), 
-													pub_data_stru->route_msg_type, log.sys_date      , 2,8); 
+													pub_data_stru->route_msg_type, log.sys_date      , 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-													pub_data_stru->route_msg_type, log.acq_insti_code, 2,8); 
+													pub_data_stru->route_msg_type, log.acq_insti_code, 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"    ), 
-													pub_data_stru->route_msg_type, log.acq_tra_no    , 2,6); 
+													pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"      ), 
-													pub_data_stru->route_msg_type, log.acq_date      , 2,8); 
+													pub_data_stru->route_msg_type, log.acq_date      , 2,9); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"  ), 
-													pub_data_stru->route_msg_type, log.acq_term_id1  , 2,16); 
+													pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17); 
 		_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"  ), 
-													pub_data_stru->route_msg_type, log.acq_term_id2  , 2,16); 			
+													pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17); 			
 		if ( 0>update_db_result_pay(&log,  ret_code))
 		{
 				if(0 < pub_data_stru->timeout_table.num--)
@@ -2850,7 +2851,7 @@ int app_reversed(glob_msg_stru * pub_data_stru)
 	time_tm = localtime(&time_cl);                                      
 	strftime(tmp, 64, "%Y%m%d%H%M%S", time_tm);  
 //	memset(fieldVal, 0, sizeof(fieldVal));
-	len = get_field_data_safe(pub_data_stru, FIELD_ORG_TRANS_INFO, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal)-1);
+	len = get_field_data_safe(pub_data_stru, FIELD_ORG_TRANS_INFO, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal));
 	if(len <= 0)
 	{
 	 	dcs_log(0, 0, "<FILE:%s,LINE:%d %s>读原交易信息数据不正确[%d]-[%d]！", __FILE__, __LINE__,__FUNCTION__, FIELD_ORG_TRANS_INFO, len);
@@ -2867,13 +2868,13 @@ int app_reversed(glob_msg_stru * pub_data_stru)
 	memcpy(TransLog.acq_tra_no, fieldVal + 4+6, 6);
 	if( strcmp(pub_data_stru->in_msg_type,"ZPOS")==0)
 	{
-		get_field_data_safe(pub_data_stru, 20, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
+		get_field_data_safe(pub_data_stru, 20, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
 		
 	}
 	else if( strcmp(pub_data_stru->in_msg_type,"LINS")==0)
 	{
-		get_field_data_safe(pub_data_stru, 41, pub_data_stru->in_msg_type, TransLog.acq_term_id1,16);
-		get_field_data_safe(pub_data_stru, 42, pub_data_stru->in_msg_type, TransLog.acq_term_id2,16);
+		get_field_data_safe(pub_data_stru, 41, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
+		get_field_data_safe(pub_data_stru, 42, pub_data_stru->in_msg_type, TransLog.acq_term_id2,17);
 		dcs_debug(0,0,"<%s> term_id1=[%s],id2=[%s]",__FUNCTION__,TransLog.acq_term_id1,TransLog.acq_term_id2);
 	}
 	else 
@@ -2882,7 +2883,7 @@ int app_reversed(glob_msg_stru * pub_data_stru)
 	  memcpy(TransLog.acq_term_id2, fieldVal + 30, 20);
 
   }
-	get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, TransLog.acq_insti_code,8);
+	get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, TransLog.acq_insti_code,9);
 	ret = select_translog(&TransLog);
 	if(ret < 0) return -1;
 	rtrim(TransLog.resp_cd_rcv);
@@ -2890,7 +2891,7 @@ int app_reversed(glob_msg_stru * pub_data_stru)
 	      TransLog.resp_cd_rcv,TransLog.void_flag,TransLog.permit_void);
 	if(ret == 1 && memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0' && TransLog.permit_void[0] == '1')
 	{
-		len=get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal)-1);
+		len=get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, fieldVal,sizeof(fieldVal));
 		if( len >0) fieldVal[len]=0x00;
 		else fieldVal[0]=0x00;
 		if(atol(fieldVal) != atol(TransLog.amount_pay))
@@ -3013,7 +3014,7 @@ int save_timeout(char *para, short fldid, glob_msg_stru *pub_data_stru)
 		if(p != NULL) d_flag = atoi(tmp);
 	}			
 	memset(buff, 0, sizeof(buff));
-	f_len = _get_field_data_safe(pub_data_stru, d_fldid, pub_data_stru->in_msg_type, buff, d_flag,sizeof(buff)-1);
+	f_len = _get_field_data_safe(pub_data_stru, d_fldid, pub_data_stru->in_msg_type, buff, d_flag,sizeof(buff));
 //	memset(t_buf, 0, sizeof(t_buf));
   t_buf[0]=0x00;
 	if(f_len > 0)
@@ -3196,43 +3197,43 @@ int update_db_pay_ret(char *para, short flag, glob_msg_stru *pub_data_stru)
 	save_addidata(pub_data_stru, 1);
 	memset(&TransLog, 0, sizeof(TransLog));
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.sys_date, 2,8);
+												DB_MSG_TYPE, TransLog.sys_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_insti_code, 2,8);
+												DB_MSG_TYPE, TransLog.acq_insti_code, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"), 
-												pub_data_stru->route_msg_type, TransLog.acq_tra_no, 2,6);
+												DB_MSG_TYPE, TransLog.acq_tra_no, 2,7);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_date, 2,8);
+												DB_MSG_TYPE, TransLog.acq_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id1, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id1, 2,17);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id2, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id2, 2,17);
 	if(0 >= select_translog(&TransLog)) return -1;
 	strcpy(TransLog.resp_cd_rcv, pub_data_stru->center_result_code);
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_PAY", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_AUTH_ID, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_AUTH_ID", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_SYS_REF_NO, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "SYS_REF_NO", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_SETTLE_DATE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{	
 		fieldVal[len]=0x00;
 		SetTransLog(&TransLog, "QS_DATE", fieldVal, 0, pub_data_stru);
@@ -3246,7 +3247,7 @@ int update_db_pay_ret(char *para, short flag, glob_msg_stru *pub_data_stru)
 //		SetTransLog(&TransLog, "ACQ_ADDITION", fieldVal, 0, pub_data_stru);
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "PAY_ADDITION"), 
-																		pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																		DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "PAY_ADDITION", fieldVal, 0, pub_data_stru);
@@ -3266,17 +3267,17 @@ int update_db_pay_app(char *para, short flag, glob_msg_stru *pub_data_stru)
 	save_addidata(pub_data_stru, 1);
 	memset(&TransLog, 0, sizeof(TransLog));
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.sys_date, 2,8);
+												DB_MSG_TYPE, TransLog.sys_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_insti_code, 2,8);
+												DB_MSG_TYPE, TransLog.acq_insti_code, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"), 
-												pub_data_stru->route_msg_type, TransLog.acq_tra_no, 2,6);
+												DB_MSG_TYPE, TransLog.acq_tra_no, 2,7);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_date, 2,8);
+												DB_MSG_TYPE, TransLog.acq_date, 2,7);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id1, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id1, 2,17);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id2, 2,26);
+												DB_MSG_TYPE, TransLog.acq_term_id2, 2,26);
 	if(0 >= select_translog(&TransLog)) return -1;
 	if(flag == 1)
 	{
@@ -3284,61 +3285,61 @@ int update_db_pay_app(char *para, short flag, glob_msg_stru *pub_data_stru)
 		SetTransLog(&TransLog, "APP_TRANS_TYPE", pub_data_stru->route_trans_type, 0, pub_data_stru);
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 <(len=_get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{	
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "PAY_ACCT_NO", fieldVal, 0, pub_data_stru);
 	  }
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 <(len= _get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_INSTI_CODE", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len= _get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, 
-																				fieldVal, 1,sizeof(fieldVal)-1)))
+																				fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_TERM_ID1", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 			  fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_TERM_ID2", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_DATE, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_DATE", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TIME, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_TIME", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 <(len= _get_field_data_safe(pub_data_stru, FIELD_TRA_NO, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_TRA_NO", fieldVal, 0, pub_data_stru);
 		}
 		if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "APP_ADDITION"), 
-																			pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																			DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 		{	
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "APP_ADDITION", fieldVal, 0, pub_data_stru);
 		}
 		if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "PAY_ADDITION"), 
-																			pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																			DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 		{
 			  fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_ADDITION", fieldVal, 0, pub_data_stru);
@@ -3346,28 +3347,28 @@ int update_db_pay_app(char *para, short flag, glob_msg_stru *pub_data_stru)
 	}	
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 		  fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_PAY", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_AUTH_ID, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_AUTH_ID", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_SYS_REF_NO, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 		  fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "SYS_REF_NO", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_SETTLE_DATE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "QS_DATE", fieldVal, 0, pub_data_stru);
@@ -3390,37 +3391,37 @@ int update_db_app_ret(char *para, short flag, glob_msg_stru *pub_data_stru)
 	save_addidata(pub_data_stru, 2);
 	memset(&TransLog, 0, sizeof(TransLog));
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.sys_date, 2,8);
+												DB_MSG_TYPE, TransLog.sys_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_insti_code, 2,8);
+												DB_MSG_TYPE, TransLog.acq_insti_code, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"), 
-												pub_data_stru->route_msg_type, TransLog.acq_tra_no, 2,6);
+												DB_MSG_TYPE, TransLog.acq_tra_no, 2,7);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_date, 2,8);
+												DB_MSG_TYPE, TransLog.acq_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id1, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id1, 2,17);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id2, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id2, 2,17);
 	if(0 >= select_translog(&TransLog)) return -1;
 	if(para != NULL)
 		strcpy(TransLog.resp_cd_rcv, pub_data_stru->center_result_code);
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "APP_ADDITION"), 
-																		pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																		DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "APP_ADDITION", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_ADDITION"), 
-																		pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																		DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "ACQ_ADDITION", fieldVal, 0, pub_data_stru);
 	}
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_APP", fieldVal, 0, pub_data_stru);
@@ -3441,17 +3442,17 @@ int update_db_app_pay(char *para, short flag, glob_msg_stru *pub_data_stru)
 	save_addidata(pub_data_stru, 2);
 	memset(&TransLog, 0, sizeof(TransLog));
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.sys_date, 2,8);
+												DB_MSG_TYPE, TransLog.sys_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_insti_code, 2,8);
+												DB_MSG_TYPE, TransLog.acq_insti_code, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"), 
-												pub_data_stru->route_msg_type, TransLog.acq_tra_no, 2,6);
+												DB_MSG_TYPE, TransLog.acq_tra_no, 2,7);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"), 
-												pub_data_stru->route_msg_type, TransLog.acq_date, 2,8);
+												DB_MSG_TYPE, TransLog.acq_date, 2,9);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id1, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id1, 2,17);
 	_get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"), 
-												pub_data_stru->route_msg_type, TransLog.acq_term_id2, 2,16);
+												DB_MSG_TYPE, TransLog.acq_term_id2, 2,17);
 	if(0 >= select_translog(&TransLog)) return -1;
 	if(flag == 1)
 	{
@@ -3459,63 +3460,63 @@ int update_db_app_pay(char *para, short flag, glob_msg_stru *pub_data_stru)
 		SetTransLog(&TransLog, "PAY_TRANS_TYPE", pub_data_stru->route_trans_type, 0, pub_data_stru);
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 <(len=_get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_ACCT_NO", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_INSTI_CODE, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_INSTI_CODE", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_TERM_ID1", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_TERM_ID2", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_DATE, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_DATE", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TIME, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_TIME", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_TRA_NO, pub_data_stru->in_msg_type, 
-																			fieldVal, 1,sizeof(fieldVal)-1)))
+																			fieldVal, 1,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_TRA_NO", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "APP_ADDITION"), 
-																			pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																			DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "APP_ADDITION", fieldVal, 0, pub_data_stru);
 		}
 //		memset(fieldVal, 0, sizeof(fieldVal));
 		if(0 < (len=get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "PAY_ADDITION"), 
-																			pub_data_stru->route_msg_type, fieldVal,sizeof(fieldVal)-1)))
+																			DB_MSG_TYPE, fieldVal,sizeof(fieldVal))))
 		{
 				fieldVal[len]=0x00;
 				SetTransLog(&TransLog, "PAY_ADDITION", fieldVal, 0, pub_data_stru);
@@ -3523,7 +3524,7 @@ int update_db_app_pay(char *para, short flag, glob_msg_stru *pub_data_stru)
 	}	
 //	memset(fieldVal, 0, sizeof(fieldVal));
 	if(0 < (len=_get_field_data_safe(pub_data_stru, FIELD_RECODE, pub_data_stru->in_msg_type, 
-																		fieldVal, 0,sizeof(fieldVal)-1)))
+																		fieldVal, 0,sizeof(fieldVal))))
 	{
 			fieldVal[len]=0x00;
 			SetTransLog(&TransLog, "RESP_CD_PAY", fieldVal, 0, pub_data_stru);
@@ -3546,7 +3547,7 @@ int get_insti_code(glob_msg_stru *pub_data_stru, char *field_id)
 //  dcs_debug(0,0,"%s,%d<%s>pre add 33 field",__FILE__,__LINE__,__FUNCTION__);
 	if(field_id && field_id[0]) inst_field = atoi(field_id);
 	else inst_field = 33;
-  if( (i=get_field_data_safe(pub_data_stru,inst_field,pub_data_stru->in_msg_type,tmp,sizeof(tmp)-1)) <=0)
+  if( (i=get_field_data_safe(pub_data_stru,inst_field,pub_data_stru->in_msg_type,tmp,sizeof(tmp))) <=0)
   	add_pub_field(pub_data_stru,inst_field,pub_data_stru->in_msg_type,
   	              	strlen(pub_data_stru->insti_code),pub_data_stru->insti_code, 0);
   else
@@ -3755,7 +3756,7 @@ int cacl_discount_1(char *amount,char *para,glob_msg_stru *pub_data_stru)
 //	 	 	dcs_debug(0,0,"<%s> 6  -2",__FUNCTION__);
 	 	 if( atol(begin_amount) <= atol(discount_amount)) return 1;
 //	 	 dcs_debug(0,0,"<%s> 6  -1",__FUNCTION__);
-	 	 i=get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, card_no,sizeof(card_no)-1);
+	 	 i=get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, card_no,sizeof(card_no));
 	 	 if( i >0 && i <20 ) card_no[i]=0x00;
 	 	 else return -1;
 //	 	 dcs_debug(0,0,"<%s> 6",__FUNCTION__);
@@ -3857,11 +3858,9 @@ int get_route_insti_code(glob_msg_stru * pub_data_stru)
 //		return i;
 		;
 	else if(i>0) return i;
-	
 	i=get_easy_route(pub_data_stru); //获取简单路由
   if( i >0) 
 		return i; //简单路由成功
-			
 	i = get_bin_route(pub_data_stru);
 	if(0 > i)
 		return i;
@@ -3907,10 +3906,10 @@ int reply_acq(glob_msg_stru *pub_data_stru)
 	pub_data_stru->switch_src_flag=1;
 	if( db_update(pub_data_stru, 0) <0 ) return -1;
 	len=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), 
-														pub_data_stru->route_msg_type, pub_data_stru->route_insti_code, 2,8);
+														pub_data_stru->route_msg_type, pub_data_stru->route_insti_code, 2,9);
 	if( len >0 ) pub_data_stru->route_insti_code[len]=0x00;
 	len=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"), 
-														pub_data_stru->route_msg_type, pub_data_stru->route_trans_type, 2,4);
+														pub_data_stru->route_msg_type, pub_data_stru->route_trans_type, 2,5);
 	if( len >0 ) pub_data_stru->route_trans_type[len]=0x00;
 	if(0 > get_route_insti_info(pub_data_stru)) //获取路由机构信息 
 		return -1;
