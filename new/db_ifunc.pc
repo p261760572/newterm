@@ -47,7 +47,6 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
     struct tm *time_tm;
     time(&tl);
     time_tm = localtime(&tl);
-//  dcs_debug(0,0,"<%s> begin",__FUNCTION__);
     if(strftime(field_val, 20, "%Y%m%d %H%M%S", time_tm) == 0) return -1;
     field_val[8] = 0;
     SetTransLog(&translog, "SYS_DATE", field_val, 0, pub_data_stru);
@@ -64,7 +63,6 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
         return -1;
     }
     ret = 1;
-//  dcs_debug(0,0,"<%s> proc 1",__FUNCTION__);
     while(1) {
         memset(field_name, 0, sizeof(field_name));
         memset(msg_type, 0, sizeof(msg_type));
@@ -98,12 +96,10 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
         }
     }
     EXEC SQL CLOSE TRANSLOG_SAVE_SET_CUR;
-//  dcs_debug(0,0,"<%s> proc 2",__FUNCTION__);
     strcpy_s(translog.acq_insti_code, pub_data_stru->insti_code, sizeof(translog.acq_insti_code));
     SetTransLog(&translog, "ACQ_MSG_TYPE", pub_data_stru->in_msg_type, 0, pub_data_stru);
     SetTransLog(&translog, "ACQ_TRANS_TYPE", pub_data_stru->in_trans_type, 0, pub_data_stru);
     SetTransLog(&translog, "APP_TYPE", pub_data_stru->app_type, 0, pub_data_stru);
-//  dcs_debug(0,0,"<%s> step_type=%d",__FUNCTION__,pub_data_stru->step_type);
     if(pub_data_stru->step_type == 1) {
         SetTransLog(&translog, "PAY_MSG_TYPE", pub_data_stru->route_msg_type, 0, pub_data_stru);
         SetTransLog(&translog, "PAY_TRANS_TYPE", pub_data_stru->route_trans_type, 0, pub_data_stru);
@@ -132,7 +128,6 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
     if(0 > _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, translog.acq_mac,0,16)) {
         dcs_log(0, 0, "at %s(%s:%d) _get_field_data_safe[%d] error",__FUNCTION__,__FILE__,__LINE__,FIELD_MAC);
     }
-//  dcs_debug(0,0,"<%s> proc 3",__FUNCTION__);
     if(0 < ret) {
         EXEC SQL INSERT INTO
         TRANSLOG
@@ -255,7 +250,6 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
         :translog.merch_info   ,
         sysdate
         );
-//      dcs_debug(0,0,"<%s> proc 4",__FUNCTION__);
         if(sqlca.sqlcode == -1) {
             dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, INSERT INTO TRANSLOG Error",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode);
             return 0;
@@ -265,11 +259,9 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
         }
         EXEC SQL COMMIT;
     } else return -1;
-//      dcs_debug(0,0,"<%s> proc 5",__FUNCTION__);
     memset(pub_data_stru->timeout_table.first_key, 0, sizeof(pub_data_stru->timeout_table.first_key));
     snprintf(pub_data_stru->timeout_table.first_key,sizeof(pub_data_stru->timeout_table.first_key), "%s,%s,%s,%s,%s,%s,%s",
              pub_data_stru->in_msg_type, translog.sys_date,translog.acq_insti_code,translog.acq_tra_no,translog.acq_date,translog.acq_term_id1,translog.acq_term_id2);
-//  dcs_debug(0,0,"<%s> end",__FUNCTION__);
     return 1;
 }
 
