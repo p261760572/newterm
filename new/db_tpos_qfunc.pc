@@ -1463,13 +1463,13 @@ int tpos_check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_s
     len = get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3D"),
                               pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
-        dcs_log(0, 0, "at %s(%s:%d) 不能读 3D 数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) 不能读 3D 数据！",__FUNCTION__,__FILE__,__LINE__);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
         return -1;
     }
     buf[len]=0;
     if(buf[0] !='1' && buf[0] !='2' && buf[0] !='3' && buf[0] !='4') {
-        dcs_log(0, 0, "at %s(%s:%d) 无法识别的缴费类型！buf[0]=%02x",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__, buf[0]);
+        dcs_log(0, 0, "at %s(%s:%d) 无法识别的缴费类型！buf[0]=%02x",__FUNCTION__,__FILE__,__LINE__, buf[0]);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
         return -1;
     }
@@ -1501,7 +1501,7 @@ int tpos_check_expenses_result(char *para, short flag, glob_msg_stru *pub_data_s
     }
     len = get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, buf,sizeof(buf));
     if(len < 0) {
-        dcs_log(0, 0, "at %s(%s:%d) 不能读 FIELD_AMOUNT数据！",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__);
+        dcs_log(0, 0, "at %s(%s:%d) 不能读 FIELD_AMOUNT数据！",__FUNCTION__,__FILE__,__LINE__);
         strcpy_s(pub_data_stru->center_result_code,"30",sizeof(pub_data_stru->center_result_code));
         return -1;
     }
@@ -1605,7 +1605,7 @@ int tpos_count_trans(glob_msg_stru *pub_data_stru, char *psam,char *settle_time)
         snprintf(tmp+offset, sizeof(tmp)-offset, "%s", tmp_names);
     }
 
-    dcs_debug(0, 0, "at %s(%s:%d) [%s]",__FUNCTION__,__FILE__,__LINE__, __FUNCTION__, tmp);
+    dcs_debug(0, 0, "at %s(%s:%d) [%s]",__FUNCTION__,__FILE__,__LINE__, tmp);
     add_pub_field(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "2B"),
                   pub_data_stru->route_msg_type, strlen(tmp), tmp, 1);
 

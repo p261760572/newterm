@@ -22,7 +22,7 @@ EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
 int DasConectDB(void) {
     char *db_user, *db_pwd;
 
-    dcs_debug(0,0,"<%s>enter DasConectDB",__FUNCTION__);
+    dcs_debug(0,0,"at %s(%s:%d) enter DasConectDB",__FUNCTION__,__FILE__,__LINE__);
     if((db_user = getenv("_DBUSR"))==NULL) {
         dcs_log(0, 0, "at %s(%s:%d) getevn _DBUSR fail",__FUNCTION__,__FILE__,__LINE__);
         return -1;

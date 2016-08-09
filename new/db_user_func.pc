@@ -9,277 +9,247 @@
 #include <string.h>
 //确定报文所对应的业务品种
 
+#include "db.h"
+
 EXEC SQL INCLUDE sqlca;
-EXEC ORACLE OPTION(RELEASE_CURSOR = YES);
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+//EXEC ORACLE OPTION(RELEASE_CURSOR = YES);
 
 // 计算手续费
-int calculate_fee(char *para, short flag, glob_msg_stru *pub_data_stru)
-{
-	char *p, *p1, tmpBuf[255 + 1];
-	int amount, fee;
-	double rate, maxfee;	
-	if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取金额域[%d]出错！", __FILE__, __LINE__, FIELD_AMOUNT);
-		strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
-		return -1;
-	}
-	amount = atol(tmpBuf);
-	for(p = para, p1 = tmpBuf; *p && *p != ',' && ((*p >= '0' && *p <= '9') || *p == '.'); *p1++ = *p++);
-	if(*p == ',')
-	{
-		rate = atof(tmpBuf) * 0.01;
-		p++;
-		for(p1 = p; *p && *p >= '0' && *p <= '9';p++);
-		if(*p || rate < 0)
-		{
-    		dcs_log(0, 0, "<FILE:%s,LINE:%d>para[%s]设置出错!", __FILE__, __LINE__, para);
-    		return -1;
-		}
-		else
-		{
-			maxfee = atol(p1);
-		}
-	}
-	else
-	{
-		if(*p)
-		{
-    		dcs_log(0, 0, "<FILE:%s,LINE:%d>para[%s]设置出错!", __FILE__, __LINE__, para);
-    		return -1;
-		}
-		else
-		{
-			maxfee = 0;		
-			rate = atof(tmpBuf) * 0.01;
-		}
-	}
-	fee = amount * rate / (1 - rate) + 0.5;
-	if(fee > maxfee && maxfee > 0) fee = maxfee;
-	sprintf(tmpBuf, "%08d", fee);
-	add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
-	sprintf(tmpBuf, "%012d", fee + amount);
-	add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
-	return 1;
+int calculate_fee(char *para, short flag, glob_msg_stru *pub_data_stru) {
+    char *p, *p1, tmpBuf[255 + 1];
+    int amount, fee;
+    double rate, maxfee;
+    if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取金额域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_AMOUNT);
+        strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
+        return -1;
+    }
+    amount = atol(tmpBuf);
+    for(p = para, p1 = tmpBuf; *p && *p != ',' && ((*p >= '0' && *p <= '9') || *p == '.'); *p1++ = *p++);
+    if(*p == ',') {
+        rate = atof(tmpBuf) * 0.01;
+        p++;
+        for(p1 = p; *p && *p >= '0' && *p <= '9'; p++);
+        if(*p || rate < 0) {
+            dcs_log(0, 0, "at %s(%s:%d) para[%s]设置出错!",__FUNCTION__,__FILE__,__LINE__, para);
+            return -1;
+        } else {
+            maxfee = atol(p1);
+        }
+    } else {
+        if(*p) {
+            dcs_log(0, 0, "at %s(%s:%d) para[%s]设置出错!",__FUNCTION__,__FILE__,__LINE__, para);
+            return -1;
+        } else {
+            maxfee = 0;
+            rate = atof(tmpBuf) * 0.01;
+        }
+    }
+    fee = amount * rate / (1 - rate) + 0.5;
+    if(fee > maxfee && maxfee > 0) fee = maxfee;
+    sprintf(tmpBuf, "%08d", fee);
+    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+    sprintf(tmpBuf, "%012d", fee + amount);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+    return 1;
 }
 //账单支付
-int bill_pay(glob_msg_stru *pub_data_stru)
-{
-	char tmpBuf[255], card_attr[2 + 1], cardno[30 + 1];
-	int amount, addup_amount, addup_count;
-	char pay_fee[8 + 1];
-	char real_amount[12 + 1];
-	char pay_org_no        [11 + 1];   
-	char pay_merch_no      [15 + 1];   
-	char pay_term_no       [8 + 1] ;   
-	char fee_type          [1 + 1] ;   
-	char fee_set           [10 + 1];   
-	char bill_info         [50 + 1];
-	char credit_flag       [1 + 1] ;   
-	int credit_card_limit          ;
-	int credit_m_a_limit           ;
-	int credit_m_c_limit           ;
-	int debit_card_limit           ;
-	int debit_m_a_limit           ;
-	int debit_m_c_limit           ;
-	memset(tmpBuf, 0, sizeof(tmpBuf));
-	if(0 > get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, cardno,sizeof(cardno)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取卡号域[%d]出错！", __FILE__, __LINE__, FIELD_CARD_NO);
-		return -1;
-	}
-	if(0 > _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "CARD_ATTR"), 
-																pub_data_stru->route_msg_type, card_attr, 2,sizeof(card_attr)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取卡类型[%d]出错！", __FILE__, __LINE__, get_pub_field_id(DB_MSG_TYPE, "CARD_ATTR"));
-		return -1;
-	}
-	if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取金额域[%d]出错！", __FILE__, __LINE__, FIELD_AMOUNT);
-		return -1;
-	}
-	amount = atol(tmpBuf);
-	if(0 > get_field_data_safe(pub_data_stru, FIELD_BILL, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取订单号域[%d]出错！", __FILE__, __LINE__, FIELD_BILL);
-		return -1;
-	}
-	EXEC SQL SELECT 
-		PAY_ORG_NO, 
-		PAY_MERCH_NO, 
-		PAY_TERM_NO, 
-		FEE_TYPE, 
-		FEE_SET, 
-		BILL_INFO, 
-		CREDIT_FLAG, 
-		CREDIT_CARD_LIMIT, 
-		CREDIT_M_A_LIMIT, 
-		CREDIT_M_C_LIMIT, 
-		DEBIT_CARD_LIMIT, 
-		DEBIT_M_A_LIMIT, 
-		DEBIT_M_C_LIMIT
-	INTO
-		:pay_org_no        , 
-		:pay_merch_no      , 
-		:pay_term_no       , 
-		:fee_type          , 
-		:fee_set           , 
-		:bill_info         ,
-		:credit_flag       , 
-		:credit_card_limit ,
-		:credit_m_a_limit  ,
-		:credit_m_c_limit  ,
-		:debit_card_limit  ,
-		:debit_m_a_limit  ,
-		:debit_m_c_limit  		
-	FROM BILL_PAY_INFO
-	WHERE STATUS = '1' AND BILL_NO = :tmpBuf;
-	if(sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<DB_QFUNC.PC:BILL_PAY>SELECT BILL_PAY_INFO Error.BILL_NO[%s]\n[sqlCode:%d]errmsg:\n----------\n%s\n", 
-		tmpBuf, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-	}
-	if(credit_flag[0] == '0' && (card_attr[0] == '2' || card_attr[0] == '3'))
-	{
-		strcpy(pub_data_stru->center_result_code, CODE_CARD_NO_ALLOW);
-		return 0;
-	}
-	if(card_attr[0] == '2' || card_attr[0] == '3') //贷记卡
-	{
-		if(credit_card_limit < amount && credit_card_limit > 0)
-		{
-			strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
-			return 0;
-		}
-		if(credit_m_a_limit > 0 || credit_m_c_limit > 0)
-		{
-			if(0 > AddUpTrans(cardno, &addup_amount, &addup_count, pub_data_stru->app_type, 1))
-				return -1;
-			if(credit_m_a_limit > 0 && credit_m_a_limit < (addup_amount + amount))
-			{
-				strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
-				return 0;		
-			}
-			if(credit_m_c_limit > 0 && addup_count + 1 > credit_m_c_limit)
-			{
-				strcpy(pub_data_stru->center_result_code, CODE_COUNT_LIMIT);
-				return 0;		
-			}
-		}
-	}
-	else
-	{
-		if(debit_card_limit < amount && debit_card_limit > 0)
-		{
-			strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
-			return 0;		
-		}
-		if(debit_m_a_limit > 0 || debit_m_c_limit > 0)
-		{
-			if(0 > AddUpTrans(cardno, &addup_amount, &addup_count, pub_data_stru->app_type, 1))
-				return -1;
-			if(debit_m_a_limit > 0 && debit_m_a_limit < (addup_amount + amount))
-			{
-				strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
-				return 0;		
-			}
-			if(debit_m_c_limit > 0 && addup_count + 1 > debit_m_c_limit)
-			{
-				strcpy(pub_data_stru->center_result_code, CODE_COUNT_LIMIT);
-				return 0;		
-			}
-		}
-	}
-	snprintf(pub_data_stru->route_insti_code,9,"%s", pay_org_no);
-	if(0 > get_route_insti_info(pub_data_stru))
-		return -1;
-	if(0 > check_route_insti(pub_data_stru))
-		return 0;
-	rtrim(bill_info);
-	add_pub_field(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, strlen(bill_info), bill_info, 1);
-	add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, 
-									strlen(pay_merch_no), pay_merch_no, 1);
-	add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, 
-									strlen(pay_term_no), pay_term_no, 1);
-	if(0 > CalcFee(fee_type, fee_set, amount, pay_fee))
-		return -1;
-	add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(pay_fee), pay_fee, 1);
-	sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
-	add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, 
-									strlen(real_amount), real_amount, 1);
-	return 1;
+int bill_pay(glob_msg_stru *pub_data_stru) {
+    char tmpBuf[255], card_attr[2 + 1], cardno[30 + 1];
+    int amount, addup_amount, addup_count;
+    char pay_fee[8 + 1];
+    char real_amount[12 + 1];
+    char pay_org_no        [11 + 1];
+    char pay_merch_no      [15 + 1];
+    char pay_term_no       [8 + 1] ;
+    char fee_type          [1 + 1] ;
+    char fee_set           [10 + 1];
+    char bill_info         [50 + 1];
+    char credit_flag       [1 + 1] ;
+    int credit_card_limit          ;
+    int credit_m_a_limit           ;
+    int credit_m_c_limit           ;
+    int debit_card_limit           ;
+    int debit_m_a_limit           ;
+    int debit_m_c_limit           ;
+    memset(tmpBuf, 0, sizeof(tmpBuf));
+    if(0 > get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, cardno,sizeof(cardno))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取卡号域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_CARD_NO);
+        return -1;
+    }
+    if(0 > _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "CARD_ATTR"),
+                                pub_data_stru->route_msg_type, card_attr, 2,sizeof(card_attr))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取卡类型[%d]出错！",__FUNCTION__,__FILE__,__LINE__, get_pub_field_id(DB_MSG_TYPE, "CARD_ATTR"));
+        return -1;
+    }
+    if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取金额域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_AMOUNT);
+        return -1;
+    }
+    amount = atol(tmpBuf);
+    if(0 > get_field_data_safe(pub_data_stru, FIELD_BILL, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取订单号域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_BILL);
+        return -1;
+    }
+    EXEC SQL SELECT
+       PAY_ORG_NO,
+       PAY_MERCH_NO,
+       PAY_TERM_NO,
+       FEE_TYPE,
+       FEE_SET,
+       BILL_INFO,
+       CREDIT_FLAG,
+       CREDIT_CARD_LIMIT,
+       CREDIT_M_A_LIMIT,
+       CREDIT_M_C_LIMIT,
+       DEBIT_CARD_LIMIT,
+       DEBIT_M_A_LIMIT,
+       DEBIT_M_C_LIMIT
+    INTO
+       :pay_org_no        ,
+       :pay_merch_no      ,
+       :pay_term_no       ,
+       :fee_type          ,
+       :fee_set           ,
+       :bill_info         ,
+       :credit_flag       ,
+       :credit_card_limit ,
+       :credit_m_a_limit  ,
+       :credit_m_c_limit  ,
+       :debit_card_limit  ,
+       :debit_m_a_limit  ,
+       :debit_m_c_limit
+    FROM BILL_PAY_INFO
+    WHERE STATUS = '1' AND BILL_NO = :tmpBuf;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT BILL_PAY_INFO Error.BILL_NO[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,tmpBuf);
+        return -1;
+    }
+    if(credit_flag[0] == '0' && (card_attr[0] == '2' || card_attr[0] == '3')) {
+        strcpy(pub_data_stru->center_result_code, CODE_CARD_NO_ALLOW);
+        return 0;
+    }
+    if(card_attr[0] == '2' || card_attr[0] == '3') { //贷记卡
+        if(credit_card_limit < amount && credit_card_limit > 0) {
+            strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
+            return 0;
+        }
+        if(credit_m_a_limit > 0 || credit_m_c_limit > 0) {
+            if(0 > AddUpTrans(cardno, &addup_amount, &addup_count, pub_data_stru->app_type, 1))
+                return -1;
+            if(credit_m_a_limit > 0 && credit_m_a_limit < (addup_amount + amount)) {
+                strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
+                return 0;
+            }
+            if(credit_m_c_limit > 0 && addup_count + 1 > credit_m_c_limit) {
+                strcpy(pub_data_stru->center_result_code, CODE_COUNT_LIMIT);
+                return 0;
+            }
+        }
+    } else {
+        if(debit_card_limit < amount && debit_card_limit > 0) {
+            strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
+            return 0;
+        }
+        if(debit_m_a_limit > 0 || debit_m_c_limit > 0) {
+            if(0 > AddUpTrans(cardno, &addup_amount, &addup_count, pub_data_stru->app_type, 1))
+                return -1;
+            if(debit_m_a_limit > 0 && debit_m_a_limit < (addup_amount + amount)) {
+                strcpy(pub_data_stru->center_result_code, CODE_AMOUNT_LIMIT);
+                return 0;
+            }
+            if(debit_m_c_limit > 0 && addup_count + 1 > debit_m_c_limit) {
+                strcpy(pub_data_stru->center_result_code, CODE_COUNT_LIMIT);
+                return 0;
+            }
+        }
+    }
+    snprintf(pub_data_stru->route_insti_code,9,"%s", pay_org_no);
+    if(0 > get_route_insti_info(pub_data_stru))
+        return -1;
+    if(0 > check_route_insti(pub_data_stru))
+        return 0;
+    rtrim(bill_info);
+    add_pub_field(pub_data_stru, FIELD_INFO, pub_data_stru->in_msg_type, strlen(bill_info), bill_info, 1);
+    add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type,
+                  strlen(pay_merch_no), pay_merch_no, 1);
+    add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type,
+                  strlen(pay_term_no), pay_term_no, 1);
+    if(0 > CalcFee(fee_type, fee_set, amount, pay_fee))
+        return -1;
+    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(pay_fee), pay_fee, 1);
+    sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type,
+                  strlen(real_amount), real_amount, 1);
+    return 1;
 }
-int bill_fee_find(glob_msg_stru *pub_data_stru)
-{
-	char tmpBuf[255];
-	int amount, len;
-	char pay_fee[8 + 1];
-	char real_amount[12 + 1];
-	char fee_type          [1 + 1] ;   
-	char fee_set           [10 + 1];   
-	char bill_info         [50 + 1];
-	memset(tmpBuf, 0, sizeof(tmpBuf));
-	if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type, 
-															tmpBuf,sizeof(tmpBuf)))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取金额域[%d]出错！", __FILE__, __LINE__, FIELD_AMOUNT);
-		strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
-		return -1;
-	}
-	amount = atol(tmpBuf);
-	if(0 >(len= get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "44"), 
-																		pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf))))
-	{
-		dcs_log(0, 0, "<FILE:%s,LINE:%d>取订单号域[%d]出错！", __FILE__, __LINE__, FIELD_BILL);
-		strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
-		return -1;
-	}
-	tmpBuf[len]=0x00;
-	EXEC SQL SELECT 
-		FEE_TYPE, 
-		FEE_SET, 
-		BILL_INFO 
-	INTO
-		:fee_type          , 
-		:fee_set           , 
-		:bill_info         
-	FROM BILL_PAY_INFO
-	WHERE STATUS = '1' AND BILL_NO = :tmpBuf;
-	if(sqlca.sqlcode == 1403)
-	{
-		sprintf(tmpBuf, "定单号不存在！");
-		add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"), 
-										pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
-		strcpy(pub_data_stru->center_result_code, "25");
-		return 1;	
-	}
-	if(sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<DB_QFUNC.PC:BILL_FEE_FIND>SELECT BILL_PAY_INFO Error.BILL_NO[%s]\n[sqlCode:%d]errmsg:\n----------\n%s\n", 
-		tmpBuf, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
-		return -1;
-	}
-	rtrim(bill_info);
-//	add_pub_field(pub_data_stru, FIELD_INFO, strlen(bill_info), bill_info, 1, NULL);
-	if(0 > CalcFee(fee_type, fee_set, amount, pay_fee))
-	{
-		strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
-		return -1;
-	}
-//	add_pub_field(pub_data_stru, FIELD_PAY_FEE, strlen(pay_fee), pay_fee, 1, NULL);
-	sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
-	add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 1);
-	snprintf(tmpBuf,sizeof(tmpBuf), "定单信息:%s\n交易金额:%.2f元\n手续费:%.2f元\n合计:%.2f元", 
-						bill_info, amount/100.0, atol(pay_fee)/100.0, atol(real_amount) /100.0);
-	add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"), 
-									pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
-	add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "4"), 
-									pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 1);
-	strcpy(pub_data_stru->center_result_code, "00");
-	return 1;
+int bill_fee_find(glob_msg_stru *pub_data_stru) {
+    char tmpBuf[255];
+    int amount, len;
+    char pay_fee[8 + 1];
+    char real_amount[12 + 1];
+    char fee_type          [1 + 1] ;
+    char fee_set           [10 + 1];
+    char bill_info         [50 + 1];
+    memset(tmpBuf, 0, sizeof(tmpBuf));
+    if(0 > get_field_data_safe(pub_data_stru, FIELD_AMOUNT, pub_data_stru->in_msg_type,
+                               tmpBuf,sizeof(tmpBuf))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取金额域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_AMOUNT);
+        strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
+        return -1;
+    }
+    amount = atol(tmpBuf);
+    if(0 >(len= get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "44"),
+                                    pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))) {
+        dcs_log(0, 0, "at %s(%s:%d) 取订单号域[%d]出错！",__FUNCTION__,__FILE__,__LINE__, FIELD_BILL);
+        strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);
+        return -1;
+    }
+    tmpBuf[len]=0x00;
+    EXEC SQL SELECT
+       FEE_TYPE,
+       FEE_SET,
+       BILL_INFO
+    INTO
+       :fee_type          ,
+       :fee_set           ,
+       :bill_info
+    FROM BILL_PAY_INFO
+    WHERE STATUS = '1' AND BILL_NO = :tmpBuf;
+    if(sqlca.sqlcode == 1403) {
+        sprintf(tmpBuf, "定单号不存在！");
+        add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"),
+                      pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+        strcpy(pub_data_stru->center_result_code, "25");
+        return 1;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT BILL_PAY_INFO Error.BILL_NO[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,tmpBuf);
+        strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
+        return -1;
+    }
+    rtrim(bill_info);
+//  add_pub_field(pub_data_stru, FIELD_INFO, strlen(bill_info), bill_info, 1, NULL);
+    if(0 > CalcFee(fee_type, fee_set, amount, pay_fee)) {
+        strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
+        return -1;
+    }
+//  add_pub_field(pub_data_stru, FIELD_PAY_FEE, strlen(pay_fee), pay_fee, 1, NULL);
+    sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 1);
+    snprintf(tmpBuf,sizeof(tmpBuf), "定单信息:%s\n交易金额:%.2f元\n手续费:%.2f元\n合计:%.2f元",
+             bill_info, amount/100.0, atol(pay_fee)/100.0, atol(real_amount) /100.0);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"),
+                  pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "4"),
+                  pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 1);
+    strcpy(pub_data_stru->center_result_code, "00");
+    return 1;
 }
 /*
 发送消息到超时通知处理类模块进行处理
@@ -290,33 +260,31 @@ int bill_fee_find(glob_msg_stru *pub_data_stru)
 para： 数据库中设置，程序可根据此参数做相应处理（可作为交易类型处理，也即发送通知的交易类型）
 pub_data_stru:交易信息缓冲区
 */
-int fdc_notify(char *para, char *inst_code,glob_msg_stru *pub_data_stru)
-{
-	char buf[1024];
-	int myFid, sLen;
-	ICS_DEBUG(0);
-/*
-// 需再增加对业务的判断，是否需要发送通知交易
+int fdc_notify(char *para, char *inst_code,glob_msg_stru *pub_data_stru) {
+    char buf[1024];
+    int myFid, sLen;
+    ICS_DEBUG(0);
+    /*
+    // 需再增加对业务的判断，是否需要发送通知交易
 
-*/	
-  if( inst_code== NULL )return -1;
-  myFid = fold_locate_folder("APPL");
-  sprintf(buf,"TIME0001");
-	sLen = sizeof(timeout_stru);
-//	insti_to_folder_code(inst_code,pub_data_stru->timeout_table.foldname);
+    */
+    if(inst_code== NULL)return -1;
+    myFid = fold_locate_folder("APPL");
+    sprintf(buf,"TIME0001");
+    sLen = sizeof(timeout_stru);
+//  insti_to_folder_code(inst_code,pub_data_stru->timeout_table.foldname);
 //  memcpy(pub_data_stru->timeout_table.foldname,inst_code,8);
-	memcpy(pub_data_stru->timeout_table.trans_type,para,4);
-	pub_data_stru->timeout_table.trans_type[4]=0x00;
-	sLen -= sizeof(pub_data_stru->timeout_table.remark);
-	memcpy(pub_data_stru->timeout_table.remark,inst_code,8);
-	sLen += strlen(pub_data_stru->timeout_table.remark) + 1;
-	pub_data_stru->timeout_table.flag[0]='6';
-	memcpy(buf +8, (char*)&(pub_data_stru->timeout_table), sLen);
-	
-	if(fold_write(myFid, myFid, buf, sLen + 8)<0) 
-	{
-  		dcs_log(0, 0, "<FILE:%s,%s>写FOLD[%d]失败!", __FILE__, __FUNCTION__, myFid);
-		return -1;
-	}
-	return 1;
+    memcpy(pub_data_stru->timeout_table.trans_type,para,4);
+    pub_data_stru->timeout_table.trans_type[4]=0x00;
+    sLen -= sizeof(pub_data_stru->timeout_table.remark);
+    memcpy(pub_data_stru->timeout_table.remark,inst_code,8);
+    sLen += strlen(pub_data_stru->timeout_table.remark) + 1;
+    pub_data_stru->timeout_table.flag[0]='6';
+    memcpy(buf +8, (char*)&(pub_data_stru->timeout_table), sLen);
+
+    if(fold_write(myFid, myFid, buf, sLen + 8)<0) {
+        dcs_log(0, 0, "at %s(%s:%d) 写FOLD[%d]失败!",__FUNCTION__,__FILE__,__LINE__, myFid);
+        return -1;
+    }
+    return 1;
 }

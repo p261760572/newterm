@@ -5,152 +5,141 @@
 #include <stdio.h>
 #include <string.h>
 #include "ibdcs.h"
-EXEC SQL INCLUDE sqlca;
 
-int tpos_update_work_key(char *psam, char *pin_key,char *mac_key,char *cd_key)
-{
-	ICS_DEBUG(0);
-	exec sql update tpos_key set pin_key=:pin_key,mac_key=:mac_key,cd_key=:cd_key where psam=:psam;
-	if( sqlca.sqlcode !=0)
-	{
-		dcs_log(0,0,"<tpos_update_work_key> update tpos_info fail psam=[%s] \n%s",psam,sqlca.sqlerrm.sqlerrmc);
-		return -1;
-	}
-	exec sql commit;
-	return 1;
+#include "db.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+int tpos_update_work_key(char *psam, char *pin_key,char *mac_key,char *cd_key) {
+    ICS_DEBUG(0);
+    exec sql update tpos_key set pin_key=:pin_key,mac_key=:mac_key,cd_key=:cd_key where psam=:psam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, update tpos_info fail psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    exec sql commit;
+    return 1;
 }
 /*
   flag: 0,重置为下载所有信息，1只下载更新信息
 */
-int tpos_reset_download(char *psam, char flag)
-{
-  ICS_DEBUG(0);
-  if ( flag )//部分更新
-  {
-  	exec sql update tpos_info set download_flag='1',stack_detail=''  where psam=:psam;
-  	if( sqlca.sqlcode !=0)
-  	{
-  		dcs_log(0,0,"<tpos_reset_download> update tpos_info fail! psam=%s flag=%d\n\%d, %s",psam,flag,sqlca.sqlcode,sqlca.sqlerrm.sqlerrmc);
-  		return -1;
-  	}
-  }
-  else //下载所有信息
-  {
-  	exec sql update tpos_info set download_flag='0',last_menu_para_step=0,stack_detail='',last_node_set='',last_other_para_step=0,last_ic_para_step=0,last_ic_key_step=0 where psam=:psam;
-  	if( sqlca.sqlcode !=0)
-  	{
-  		dcs_log(0,0,"<tpos_reset_download> update tpos_info fail! psam=%s,flag=%d\n\%d, %s",psam,flag,sqlca.sqlcode,sqlca.sqlerrm.sqlerrmc);
-  		return -1;
-  	}
-  }
-  exec sql commit;
-  return 1;
+int tpos_reset_download(char *psam, char flag) {
+    ICS_DEBUG(0);
+    if(flag) { //部分更新
+        exec sql update tpos_info set download_flag='1',stack_detail=''  where psam=:psam;
+        if(sqlca.sqlcode !=0) {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, update tpos_info fail! psam=%s flag=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam,flag);
+            return -1;
+        }
+    } else { //下载所有信息
+        exec sql update tpos_info set download_flag='0',last_menu_para_step=0,stack_detail='',last_node_set='',last_other_para_step=0,last_ic_para_step=0,last_ic_key_step=0 where psam=:psam;
+        if(sqlca.sqlcode !=0) {
+            dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, update tpos_info fail! psam=%s,flag=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam,flag);
+            return -1;
+        }
+    }
+    exec sql commit;
+    return 1;
 }
-int db_save_stack(char *psam,int *stack,int use)
-{
-	int i;
-	char node_set[256];
-	ICS_DEBUG(0);
-	node_set[0]=0x00;
-	if(use <=0) return 1;
-	dcs_debug(0,0,"<db_save_stack> begin");
-	for ( i=0 ; i<use;i++)
-		sprintf(node_set+strlen(node_set),"%d,",stack[i]);
-	node_set[strlen(node_set)-1]=0x00;
-	exec sql update tpos_info set stack_detail=:node_set where psam=:psam;
-	if( sqlca.sqlcode !=0)	
-	{
-		dcs_log(0,0,"<db_save_stack> update tpos_info error psam=[%s] \n %s",psam,sqlca.sqlerrm.sqlerrmc);
-		return -1;
-	}
-	exec sql commit;
-	return 1;
+int db_save_stack(char *psam,int *stack,int use) {
+    int i;
+    char node_set[256];
+    ICS_DEBUG(0);
+    node_set[0]=0x00;
+    if(use <=0) return 1;
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    for(i=0 ; i<use; i++)
+        sprintf(node_set+strlen(node_set),"%d,",stack[i]);
+    node_set[strlen(node_set)-1]=0x00;
+    exec sql update tpos_info set stack_detail=:node_set where psam=:psam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, update tpos_info error psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    exec sql commit;
+    return 1;
 }
-int save_download_para_info(int flag,int step,char *set,char *psam)
-{
-ICS_DEBUG(0);
-  if (flag ) // 菜单参数下载存储信息
-	   EXEC SQL UPDATE tpos_info SET last_menu_para_step=:step,last_node_set=:set where psam = :psam;
-	else 	
-		 EXEC SQL UPDATE tpos_info SET last_other_para_step = :step,last_node_set=:set where psam = :psam;
-  
-  if ( sqlca.sqlcode !=0)
-  {
-  		dcs_log( 0,0, "<save_download_para_node> update tpos_info DB error !psam=%s\n%s",psam,sqlca.sqlerrm.sqlerrmc );
-   		return -1;
-  }
-  EXEC SQL commit;
-  return 1;
+int save_download_para_info(int flag,int step,char *set,char *psam) {
+    ICS_DEBUG(0);
+    if(flag)   // 菜单参数下载存储信息
+        EXEC SQL UPDATE tpos_info SET last_menu_para_step=:step,last_node_set=:set where psam = :psam;
+        else
+            EXEC SQL UPDATE tpos_info SET last_other_para_step = :step,last_node_set=:set where psam = :psam;
+
+            if(sqlca.sqlcode !=0) {
+                dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info DB error !psam=%s",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+                return -1;
+            }
+    EXEC SQL commit;
+    return 1;
 }
-int empty_tmp_para( char *psam)
-{
-	exec sql update tpos_info set last_node_set='' where psam=:psam;
-		
-	if( sqlca.sqlcode !=0)
-	{
-		dcs_log(0,0,"<empty_tmp_para> update tpos_info error psam=[%s]\n",psam,sqlca.sqlerrm.sqlerrmc);
-		return -1;
-	}
-	dcs_debug(0,0,"<empty_tmp_para> clear node_set end");
-	exec sql commit;
-	return 1;
+int empty_tmp_para(char *psam) {
+    exec sql update tpos_info set last_node_set='' where psam=:psam;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, update tpos_info error psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) clear node_set end",__FUNCTION__,__FILE__,__LINE__);
+    exec sql commit;
+    return 1;
 }
-int db_save_set( char *node_set,int step,char *psam)
-{
-	ICS_DEBUG(0);
-	 EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_menu_para_step=:step where psam = :psam;
-  
-  if ( sqlca.sqlcode !=0)
-  {
-  		dcs_log( 0,0, "<db_save_set> update tpos_info DB error psam=[%s]!\n%s",psam,sqlca.sqlerrm.sqlerrmc );
-   		return -1;
-  }
-  dcs_debug(0,0,"<db_save_set> saved node_set=[%s],step=%d ",node_set,step);
-  EXEC SQL commit;
-  return 1;
+int db_save_set(char *node_set,int step,char *psam) {
+    ICS_DEBUG(0);
+    EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_menu_para_step=:step where psam = :psam;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info DB error psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) saved node_set=[%s],step=%d ",__FUNCTION__,__FILE__,__LINE__,node_set,step);
+    EXEC SQL commit;
+    return 1;
 }
 
-int update_tpos_sn( char *psam ,char *sn)
-{
-	ICS_DEBUG(0);
-	exec sql update tpos_info set sn=:sn where psam=:psam;
-	if( sqlca.sqlcode !=0)
-	{
-		dcs_log( 0,0, "<update_tpos_sn> update tpos_info  error psam=[%s]!sn=[%s]\n%s",psam,sn,sqlca.sqlerrm.sqlerrmc );
-		return -1;
-	}
-	return 1;
+int update_tpos_sn(char *psam ,char *sn) {
+    ICS_DEBUG(0);
+    exec sql update tpos_info set sn=:sn where psam=:psam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info  error psam=[%s]!sn=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam,sn);
+        return -1;
+    }
+    return 1;
 }
 /*
 int update_db_tpos_voidflag( tl_tpos_log_def *log, char flag, char *ret_code)
 {
-	ICS_DEBUG(0);
-	if(ret_code == NULL)
-		exec sql update tpos_log set VOID_FLAG = :flag where  ACQ_TRA_NO=:log->acq_tra_no and
-			psam = :log->psam and sys_date=:log->sys_date and ACQ_INSTI_CODE =:log->acq_insti_code;
-	else
-		exec sql update tpos_log set VOID_FLAG = :flag, RESP_CD_RCV = :ret_code where  ACQ_TRA_NO=:log->acq_tra_no and
-			psam = :log->psam and sys_date=:log->sys_date and ACQ_INSTI_CODE =:log->acq_insti_code;
-	if(sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<update_db_tpos_voidflag>UPDATE tpos_log Error.\n"
-		"SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], psam[%s], "
-		"[sqlCode:%d]errmsg:\n----------\n%s\n", 
-		log->sys_date, log->acq_insti_code, log->acq_tra_no, log->psam,  
-		sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		EXEC SQL ROLLBACK;
-		return -1;
-	}        
-	EXEC SQL COMMIT;
-	return 1;
+    ICS_DEBUG(0);
+    if(ret_code == NULL)
+        exec sql update tpos_log set VOID_FLAG = :flag where  ACQ_TRA_NO=:log->acq_tra_no and
+            psam = :log->psam and sys_date=:log->sys_date and ACQ_INSTI_CODE =:log->acq_insti_code;
+    else
+        exec sql update tpos_log set VOID_FLAG = :flag, RESP_CD_RCV = :ret_code where  ACQ_TRA_NO=:log->acq_tra_no and
+            psam = :log->psam and sys_date=:log->sys_date and ACQ_INSTI_CODE =:log->acq_insti_code;
+    if(sqlca.sqlcode)
+    {
+        dcs_log(0, 0, "at %s(%s:%d) <update_db_tpos_voidflag>UPDATE tpos_log Error.\n",__FUNCTION__,__FILE__,__LINE__
+        "SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], psam[%s], "
+        "[sqlCode:%d]errmsg:\n----------\n%s\n",
+        log->sys_date, log->acq_insti_code, log->acq_tra_no, log->psam,
+        sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc);
+        EXEC SQL ROLLBACK;
+        return -1;
+    }
+    EXEC SQL COMMIT;
+    return 1;
 }
 */
 /*
 int update_tpos_translog(tl_tpos_log_def *log)
 {
-	ICS_DEBUG(0);
-	EXEC SQL UPDATE TPOS_LOG
-    SET 
+    ICS_DEBUG(0);
+    EXEC SQL UPDATE TPOS_LOG
+    SET
        RESP_CD_APP = :log->resp_cd_app,
        PAY_ACCT_NO = :log->pay_acct_no,
        SYS_REF_NO = :log->sys_ref_no,
@@ -159,50 +148,46 @@ int update_tpos_translog(tl_tpos_log_def *log)
        APP_ADDITION = :log->app_addition,
        ACQ_ADDITION = :log->acq_addition,
        RESP_CD_RCV = :log->resp_cd_rcv
-	WHERE SYS_DATE = :log->sys_date
-		AND ACQ_TRA_NO = :log->acq_tra_no
-		AND PSAM = :log->psam;
-	if(sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<update_tpos_translog>UPDATE tpos_log Error.\n"
-		"SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], psam[%s], "
-		"[sqlCode:%d]errmsg:\n----------\n%s\n", 
-		log->sys_date, log->acq_insti_code, log->acq_tra_no, log->psam,  
-		sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		EXEC SQL ROLLBACK;
-		return -1;
-	}        
-	EXEC SQL COMMIT;
-	return 0;
+    WHERE SYS_DATE = :log->sys_date
+        AND ACQ_TRA_NO = :log->acq_tra_no
+        AND PSAM = :log->psam;
+    if(sqlca.sqlcode)
+    {
+        dcs_log(0, 0, "at %s(%s:%d) <update_tpos_translog>UPDATE tpos_log Error.\n",__FUNCTION__,__FILE__,__LINE__
+        "SYS_DATE[%s], ACQ_INSTI_CODE[%s], ACQ_TRA_NO[%s], psam[%s], "
+        "[sqlCode:%d]errmsg:\n----------\n%s\n",
+        log->sys_date, log->acq_insti_code, log->acq_tra_no, log->psam,
+        sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc);
+        EXEC SQL ROLLBACK;
+        return -1;
+    }
+    EXEC SQL COMMIT;
+    return 0;
 }
 */
-int db_save_set_ic( char *node_set,int step,char *psam, int flag)
-{
-	ICS_DEBUG(0);
-	dcs_debug(0,0,"<%s> begin",__FUNCTION__);
-	if( !flag )
-	    EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_ic_para_step=:step where psam = :psam;
-	else
-     EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_ic_key_step=:step where psam = :psam;
-  if ( sqlca.sqlcode !=0)
-  {
-  		dcs_log( 0,0, "<db_save_set_ic> update tpos_info DB error psam=[%s]!\n%s",psam,sqlca.sqlerrm.sqlerrmc );
-   		return -1;
-  }
-  dcs_debug(0,0,"<db_save_set_ic> saved node_set=[%s],step=%d psam=[%s]",node_set,step,psam);
-  EXEC SQL commit;
-  dcs_debug(0,0,"<%s> end",__FUNCTION__);
-  return 1;
+int db_save_set_ic(char *node_set,int step,char *psam, int flag) {
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    if(!flag)
+        EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_ic_para_step=:step where psam = :psam;
+        else
+            EXEC SQL UPDATE tpos_info SET last_node_set=:node_set,last_ic_key_step=:step where psam = :psam;
+            if(sqlca.sqlcode !=0) {
+                dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info DB error psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+                return -1;
+            }
+    dcs_debug(0,0,"at %s(%s:%d) saved node_set=[%s],step=%d psam=[%s]",__FUNCTION__,__FILE__,__LINE__,node_set,step,psam);
+    EXEC SQL commit;
+    dcs_debug(0,0,"at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
 }
-int update_auto_download_flag( char *psam)
-{
-	exec sql update tpos_info set menu_update_flag='0' where psam= :psam;
-	if ( sqlca.sqlcode !=0)
-  {
-  		dcs_log( 0,0, "<%s> update tpos_info DB error psam=[%s]!\n%s",__FUNCTION__,psam,sqlca.sqlerrm.sqlerrmc );
-   		return -1;
-  }
-  EXEC SQL commit;
-  dcs_debug(0,0,"<%s> end",__FUNCTION__);
-  return 1;
+int update_auto_download_flag(char *psam) {
+    exec sql update tpos_info set menu_update_flag='0' where psam= :psam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0, "at %s(%s:%d) sqlcode=%d, update tpos_info DB error psam=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,psam);
+        return -1;
+    }
+    EXEC SQL commit;
+    dcs_debug(0,0,"at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
 }

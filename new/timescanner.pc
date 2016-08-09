@@ -6,260 +6,232 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
-#include "ibdcs.h"	
+#include "ibdcs.h"
 #include "base.h"
 #include "general_util.h"
 #include "tools.h"
-#include "db_tools.h" 
+#include "db_tools.h"
+
+#include "db.h"
+
 EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
+
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
 
 static void TimeScanExit(int signo);
 static int OpenLog(char *IDENT);
 int doLoop(void);
 
 /*读取超时表*/
-int ReadDelTimeOutTbl(timeout_stru *p_rec)
-{
-	EXEC SQL BEGIN DECLARE SECTION;
-		timeout_stru timeout;
-		unsigned long now;
-	EXEC SQL END DECLARE SECTION;
-	int ret;
-	time(&now);
-	EXEC SQL SELECT 
-		SYS_DATE   ,
-		SYS_TIME   ,
-		FOLDNAME   ,
-		FLAG        ,
-		TIMEOUT     ,
-		NUM         ,
-		REMARK        ,
-		KEY			,
-		TRANS_TYPE  ,
-		CAKEY		
-	INTO 
-		:timeout.sys_date,
-		:timeout.sys_time, 
-		:timeout.foldname  ,
-		:timeout.flag       ,
-		:timeout.invalid_time    ,
-		:timeout.num        ,
-		:timeout.remark       ,
-		:timeout.key		,
-		:timeout.trans_type ,
-		:timeout.first_key			
-	FROM TRANSTIMEOUT 
-	WHERE TIMEOUT < :now and rownum=1 order by timeout asc FOR UPDATE ;
-	if(sqlca.sqlcode == 0)
-	{
-		rtrim(timeout.key);
-		EXEC SQL DELETE FROM TRANSTIMEOUT WHERE KEY=:timeout.key;
-		if ( sqlca.sqlcode)
-		{
-	    	dcs_log(0, 0, "<DBFUNCTION.PC:ReadDelTimeOutTbl>DELETE FROM TRANSTIMEOUT Error[%s].\n[sqlCode:%d]errmsg:\n----------\n%s\n", timeout.key, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-	    	ret = -1;
-		} 
-		else
-		{
-			memcpy(p_rec, &timeout, sizeof(timeout));
-			ret = 1;
-		}
-	}
-	else if( -3114 == sqlca.sqlcode || -3135 == sqlca.sqlcode || -3113 == sqlca.sqlcode)
-	{
-	    dcs_log(0,0,"<MESSAGE.PC:SetMsgKey>数据库连接异常，自动重连数据库。\n");
-    	if(0 == DasConectDB()) 
-    		ret = 2;
-    	else
-    		ret = -1;
-	}else if(sqlca.sqlcode != 1403)
-	{
-    	dcs_log(0, 0, "<DBFUNCTION.PC:ReadDelTimeOutTbl>SELECT TRANSTIMEOUT Error.\n[sqlCode:%d]errmsg:\n----------\n%s\n", sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		ret = -1;
-	}
-	else
-		ret = 0;
-  	EXEC SQL COMMIT WORK ;
-   	return ret;
- }
+int ReadDelTimeOutTbl(timeout_stru *p_rec) {
+    timeout_stru timeout;
+    unsigned long now;
+    int ret;
+    time(&now);
+    EXEC SQL SELECT
+       SYS_DATE   ,
+       SYS_TIME   ,
+       FOLDNAME   ,
+       FLAG        ,
+       TIMEOUT     ,
+       NUM         ,
+       REMARK        ,
+       KEY          ,
+       TRANS_TYPE  ,
+       CAKEY
+    INTO
+       :timeout.sys_date,
+       :timeout.sys_time,
+       :timeout.foldname  ,
+       :timeout.flag       ,
+       :timeout.invalid_time    ,
+       :timeout.num        ,
+       :timeout.remark       ,
+       :timeout.key     ,
+       :timeout.trans_type ,
+       :timeout.first_key
+    FROM TRANSTIMEOUT
+    WHERE TIMEOUT < :now and rownum=1 order by timeout asc FOR UPDATE ;
+    if(sqlca.sqlcode == 0) {
+        rtrim(timeout.key);
+        EXEC SQL DELETE FROM TRANSTIMEOUT WHERE KEY=:timeout.key;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, DELETE FROM TRANSTIMEOUT Error[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, timeout.key);
+            ret = -1;
+        } else {
+            memcpy(p_rec, &timeout, sizeof(timeout));
+            ret = 1;
+        }
+    } else if(-3114 == sqlca.sqlcode || -3135 == sqlca.sqlcode || -3113 == sqlca.sqlcode) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, 数据库连接异常，自动重连数据库",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        if(0 == DasConectDB())
+            ret = 2;
+        else
+            ret = -1;
+    } else if(sqlca.sqlcode != 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSTIMEOUT Error",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        ret = -1;
+    } else
+        ret = 0;
+    EXEC SQL COMMIT WORK ;
+    return ret;
+}
 
 /*插入超时表*/
-int InsTimeOutTBL(timeout_stru *p_rec, int outSec)
-{
-	EXEC SQL BEGIN DECLARE SECTION;
-  		timeout_stru timeout;
-	EXEC SQL END DECLARE SECTION;
-	long now;
-	time(&now);
-	memcpy(&timeout, p_rec, sizeof(timeout));
-	timeout.invalid_time = now + outSec;
-	EXEC SQL INSERT INTO TRANSTIMEOUT
-	(
-		SYS_TIME    ,
-		SYS_DATE    ,
-		FOLDNAME   ,
-		FLAG        ,
-		TIMEOUT     ,
-		NUM         ,
-		REMARK        ,
-		KEY			,
-		TRANS_TYPE  ,
-		CAKEY	
-	)
-	VALUES
-	(
-		:timeout.sys_time  ,
-		:timeout.sys_date  , 
-		:timeout.foldname  ,
-		:timeout.flag       ,
-		:timeout.invalid_time    ,
-		:timeout.num        ,
-		:timeout.remark       ,
-		:timeout.key		,
-		:timeout.trans_type , 
-		:timeout.first_key
-	);
-	if(sqlca.sqlcode == 0 )
-	{
-     	EXEC SQL COMMIT WORK ;
-     	return 1;
-  	}
-  	else
-  	{
-    	dcs_log(&timeout, sizeof(timeout_stru), "<DBFUNCTION.PC:InsTimeOutTBL>INSERT INTO TRANSTIMEOUT Error.\n[sqlCode:%d]errmsg:\n----------\n%s\n", sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-  	}
+int InsTimeOutTBL(timeout_stru *p_rec, int outSec) {
+    timeout_stru timeout;
+    long now;
+    time(&now);
+    memcpy(&timeout, p_rec, sizeof(timeout));
+    timeout.invalid_time = now + outSec;
+    EXEC SQL INSERT INTO TRANSTIMEOUT
+    (
+       SYS_TIME    ,
+       SYS_DATE    ,
+       FOLDNAME   ,
+       FLAG        ,
+       TIMEOUT     ,
+       NUM         ,
+       REMARK        ,
+       KEY          ,
+       TRANS_TYPE  ,
+       CAKEY
+    )
+    VALUES
+    (
+       :timeout.sys_time  ,
+       :timeout.sys_date  ,
+       :timeout.foldname  ,
+       :timeout.flag       ,
+       :timeout.invalid_time    ,
+       :timeout.num        ,
+       :timeout.remark       ,
+       :timeout.key     ,
+       :timeout.trans_type ,
+       :timeout.first_key
+    );
+    if(sqlca.sqlcode == 0) {
+        EXEC SQL COMMIT WORK ;
+        return 1;
+    } else {
+        dcs_log(&timeout, sizeof(timeout_stru), "at %s(%s:%d) <DBFUNCTION.PC:InsTimeOutTBL>INSERT INTO TRANSTIMEOUT Error.\n[sqlCode:%d]errmsg:\n----------\n%s\n",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc);
+        return -1;
+    }
 }
 
-void rtrim( char * str)
-{
-	int i;
-	if ( str == NULL ) return ;
-	i=strlen(str);
-	for(;i>0;i--)
-	   if( str[i-1]!=0x20) break;
-	str[i]=0x00;
+void rtrim(char * str) {
+    int i;
+    if(str == NULL) return ;
+    i=strlen(str);
+    for(; i>0; i--)
+        if(str[i-1]!=0x20) break;
+    str[i]=0x00;
 }
 
-int main(int argc, char *argv[])
-{
-	
-	catch_all_signals(TimeScanExit);
-	u_daemonize(NULL);
-	/*打开日志文件*/
-	if (0 > OpenLog(argv[0]))
-		exit(1);
-    dcs_log(0,0, "TimeScan Servers is starting up...\n");
-    
+int main(int argc, char *argv[]) {
+
+    catch_all_signals(TimeScanExit);
+    u_daemonize(NULL);
+    /*打开日志文件*/
+    if(0 > OpenLog(argv[0]))
+        exit(1);
+    dcs_log(0,0, "at %s(%s:%d) TimeScan Servers is starting up...\n",__FUNCTION__,__FILE__,__LINE__);
+
     /*连接数据库*/
-    if (0 > DasConectDB())
-    {
-        dcs_log(0,0,"Can not open oracle DB !");
+    if(0 > DasConectDB()) {
+        dcs_log(0,0,"at %s(%s:%d) Can not open oracle DB !",__FUNCTION__,__FILE__,__LINE__);
         TimeScanExit(0);
     }
-    if ( dcs_connect_shm() < 0 )
-    {
-        dcs_log(0,0,"<FILE:%s,LINE:%d>dcs_connect_shm() failed:%s\n", __FILE__, __LINE__, strerror(errno));
+    if(dcs_connect_shm() < 0) {
+        dcs_log(0,0,"at %s(%s:%d) dcs_connect_shm() failed:%s\n",__FUNCTION__,__FILE__,__LINE__, strerror(errno));
         exit(1);
     }
     /*初始化flod*/
-    if (fold_initsys() < 0)
-    {
-        dcs_log(0,0, "cannot attach to folder system!");
+    if(fold_initsys() < 0) {
+        dcs_log(0,0, "at %s(%s:%d) cannot attach to folder system!",__FUNCTION__,__FILE__,__LINE__);
         return -1;
     }
-    dcs_log(0,0,"*************************************************\n"
+    dcs_log(0,0,"at %s(%s:%d)\n*************************************************\n"
             "!!        TimeScanner Servers startup completed.        !!\n"
-            "*************************************************\n");
-		doLoop();
+            "*************************************************\n",__FUNCTION__,__FILE__,__LINE__);
+    doLoop();
 
-		TimeScanExit(0);
-   return 0; 
+    TimeScanExit(0);
+    return 0;
 }
 
-static void TimeScanExit(int signo)
-{
-    if (signo > 0)
-        dcs_log(0, 0,"catch a signal %d\n",signo);
-    if (signo !=0 && signo != SIGTERM && signo != SIGSEGV)
+static void TimeScanExit(int signo) {
+    if(signo > 0)
+        dcs_log(0, 0,"at %s(%s:%d) catch a signal %d\n",__FUNCTION__,__FILE__,__LINE__,signo);
+    if(signo !=0 && signo != SIGTERM && signo != SIGSEGV)
         return;
-    dcs_log(0,0,"Time Scanner terminated.\n");
-    DasEnd( 0 );
+    dcs_log(0,0,"at %s(%s:%d) Time Scanner terminated.\n",__FUNCTION__,__FILE__,__LINE__);
+    DasEnd(0);
     exit(signo);
 }
 
 
-static int OpenLog(char *IDENT)
-{
+static int OpenLog(char *IDENT) {
     char logfile[256];
 
     //assuming the log file is "$FEP_RUNPATH/log/appsvr1.log"
-    if (u_fabricatefile("log/timescanner.log",logfile,sizeof(logfile)) < 0)
+    if(u_fabricatefile("log/timescanner.log",logfile,sizeof(logfile)) < 0)
         return -1;
 
     return dcs_log_open(logfile, IDENT);
 }
 
 /*每隔1秒钟读取数据库中超时记录*/
-int doLoop(void)
-{
+int doLoop(void) {
     timeout_stru st_rec;
     int iRc;
-  for (;;)
-  {
-		while( 1 )
-		{
-			iRc = ReadDelTimeOutTbl(&st_rec);
-			if(iRc == 1)
-			{
-				if(0 > DoTimeOutRecode(&st_rec))
-				{
-					InsTimeOutTBL(&st_rec,1);
-//					return -1;
-          usleep(500000);  
-				}
-				usleep(100000);
-			}
-			else
-			{
-				break;
-			}
-		}
-		usleep(500000);
-	}
-	return 1;
+    for(;;) {
+        while(1) {
+            iRc = ReadDelTimeOutTbl(&st_rec);
+            if(iRc == 1) {
+                if(0 > DoTimeOutRecode(&st_rec)) {
+                    InsTimeOutTBL(&st_rec,1);
+//                  return -1;
+                    usleep(500000);
+                }
+                usleep(100000);
+            } else {
+                break;
+            }
+        }
+        usleep(500000);
+    }
+    return 1;
 }
 
-int DoTimeOutRecode(timeout_stru *p_rec)
-{
-	char caSendBuf[1300];
-	int iRc,iDestFolderId, sLen;
-	memset(caSendBuf,0,sizeof(caSendBuf));
-	/*发送超时信息*/		
-	memcpy(caSendBuf,"TIME0001",8);   /*内部命令，超时*/
-	sLen = sizeof(timeout_stru);
-	sLen -= sizeof(p_rec->remark);
-	rtrim(p_rec->remark);
-	sLen += strlen(p_rec->remark) + 1;
-	memcpy(caSendBuf + 8, p_rec, sLen);
-	rtrim(p_rec->foldname);
-	iDestFolderId= fold_locate_folder(p_rec->foldname);
-	if(0 > iDestFolderId)
-	{
-	    /*初始化flod*/
-	    if (fold_initsys() < 0)
-	    {
-	        dcs_log(0,0, "cannot attach to folder system!");
-	        return -1;
-	    }
-		iDestFolderId= fold_locate_folder(p_rec->foldname);
-	}
+int DoTimeOutRecode(timeout_stru *p_rec) {
+    char caSendBuf[1300];
+    int iRc,iDestFolderId, sLen;
+    memset(caSendBuf,0,sizeof(caSendBuf));
+    /*发送超时信息*/
+    memcpy(caSendBuf,"TIME0001",8);   /*内部命令，超时*/
+    sLen = sizeof(timeout_stru);
+    sLen -= sizeof(p_rec->remark);
+    rtrim(p_rec->remark);
+    sLen += strlen(p_rec->remark) + 1;
+    memcpy(caSendBuf + 8, p_rec, sLen);
+    rtrim(p_rec->foldname);
+    iDestFolderId= fold_locate_folder(p_rec->foldname);
+    if(0 > iDestFolderId) {
+        /*初始化flod*/
+        if(fold_initsys() < 0) {
+            dcs_log(0,0, "at %s(%s:%d) cannot attach to folder system!",__FUNCTION__,__FILE__,__LINE__);
+            return -1;
+        }
+        iDestFolderId= fold_locate_folder(p_rec->foldname);
+    }
     iRc = fold_write(iDestFolderId, -1,caSendBuf, sLen + 8);
-    if ( iRc < 0 )
-    {
-        dcs_log(0,0, "<FILE:%s,LINE:%d><DoTimeOutRecode>Failure to write msg to folder[%d][%s]!",__FILE__,__LINE__,iDestFolderId, p_rec->foldname);
+    if(iRc < 0) {
+        dcs_log(0,0, "at %s(%s:%d) <DoTimeOutRecode>Failure to write msg to folder[%d][%s]!",__FUNCTION__,__FILE__,__LINE__,iDestFolderId, p_rec->foldname);
         return -1;
-    }		
-//    dcs_debug(caSendBuf, sLen + 8, "<FILE:%s,LINE:%d><DoTimeOutRecode>success to write msg to folder[%d]!",__FILE__,__LINE__,iDestFolderId);
-	return 0;
+    }
+    return 0;
 }

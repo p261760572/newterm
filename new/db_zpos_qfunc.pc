@@ -11,708 +11,705 @@
 #include "zpos.h"
 #include "db_tools.h"
 
+#include "db.h"
+
 EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC SQL INCLUDE sqlcpr;
 
-int zpos_gen_work_key(glob_msg_stru *pub_data_stru,const char *psam)
-{
-	char sek_indx[6],tek_indx[6],tm_key[33],pin_key1[33],pin_key2[33+8];
-	char tmp[256],mac_key1[33],mac_key2[33+8],cd_key1[33],cd_key2[33+8];
-	int n;
-	ICS_DEBUG(0);
-	dcs_debug(0,0,"<%s>begin",__FUNCTION__);
-	memset(sek_indx,0,sizeof(sek_indx));
-	memset(tek_indx,0,sizeof(tek_indx));
-	memset(tm_key,0,sizeof(tm_key));
-	memset(pin_key1,0,sizeof(pin_key1));
-	memset(pin_key2,0,sizeof(pin_key2));
-	memset(mac_key1,0,sizeof(mac_key1));
-	memset(mac_key2,0,sizeof(mac_key2));
-	memset(cd_key1,0,sizeof(cd_key1));
-	memset(cd_key2,0,sizeof(cd_key2));
-	exec sql select sek_indx,tek_indx,tm_key1 into :sek_indx,:tek_indx,:tm_key
-	     from tpos_key where psam=:psam;
-	
-  if( sqlca.sqlcode !=0)
-  {
-  	dcs_log(0,0,"<%s> select tpos_key error! \n errmsg:\n%s",__FUNCTION__,sqlca.sqlerrm.sqlerrmc);
-  	return -1;
-  }
-	 if( 0>_tpos_get_key32(sek_indx,sek_indx,tm_key,pin_key1,pin_key2))
-	  {
-	  		dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",sek_indx,tek_indx,tm_key);
-	  		return -1;
-	  }
-	  dcs_debug(0,0,"<tpos_gen_work_key>, pin_key=%s",pin_key2);
-	//  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
-	  if (0 >_tpos_get_key32(sek_indx,sek_indx,tm_key,mac_key1,mac_key2))
-	  {
-	  	dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",sek_indx,tek_indx,tm_key);
-	  	return -1;
-	  }
-	  dcs_debug(0,0,"<%s>, copy new mac to in_mac_key",__FUNCTION__);
-	   memcpy(pub_data_stru->in_mac_key,mac_key1,32);
-	  memcpy(pub_data_stru->route_mac_key,mac_key1,32);
-	  snprintf(pub_data_stru->route_mac_index,5,"%s",sek_indx);
-	  dcs_debug(mac_key1,32,"<tpos_gen_work_key>, mac_key2=%s",mac_key2);
-	  if(0>_tpos_get_key32(sek_indx,sek_indx,tm_key,cd_key1,cd_key2))
-	  {
-	  	dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",sek_indx,tek_indx,tm_key);
-	  	return -1;
-	  }
-	  dcs_debug(0,0,"<tpos_gen_work_key>, data_key=%s",cd_key2);
+EXEC SQL WHENEVER SQLERROR DO DB_ERROR();
+
+int zpos_gen_work_key(glob_msg_stru *pub_data_stru,const char *psam) {
+    char sek_indx[6],tek_indx[6],tm_key[33],pin_key1[33],pin_key2[33+8];
+    char tmp[256],mac_key1[33],mac_key2[33+8],cd_key1[33],cd_key2[33+8];
+    int n;
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    memset(sek_indx,0,sizeof(sek_indx));
+    memset(tek_indx,0,sizeof(tek_indx));
+    memset(tm_key,0,sizeof(tm_key));
+    memset(pin_key1,0,sizeof(pin_key1));
+    memset(pin_key2,0,sizeof(pin_key2));
+    memset(mac_key1,0,sizeof(mac_key1));
+    memset(mac_key2,0,sizeof(mac_key2));
+    memset(cd_key1,0,sizeof(cd_key1));
+    memset(cd_key2,0,sizeof(cd_key2));
+    exec sql select sek_indx,tek_indx,tm_key1 into :sek_indx,:tek_indx,:tm_key
+         from tpos_key where psam=:psam;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select tpos_key error!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(0>_tpos_get_key32(sek_indx,sek_indx,tm_key,pin_key1,pin_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) pin_key=%s",__FUNCTION__,__FILE__,__LINE__,pin_key2);
+    //  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
+    if(0 >_tpos_get_key32(sek_indx,sek_indx,tm_key,mac_key1,mac_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) copy new mac to in_mac_key",__FUNCTION__,__FILE__,__LINE__);
+    memcpy(pub_data_stru->in_mac_key,mac_key1,32);
+    memcpy(pub_data_stru->route_mac_key,mac_key1,32);
+    snprintf(pub_data_stru->route_mac_index,5,"%s",sek_indx);
+    dcs_debug(mac_key1,32,"at %s(%s:%d) mac_key2=%s",__FUNCTION__,__FILE__,__LINE__,mac_key2);
+    if(0>_tpos_get_key32(sek_indx,sek_indx,tm_key,cd_key1,cd_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! sek_indx=%s,tek_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,sek_indx,tek_indx,tm_key);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) data_key=%s",__FUNCTION__,__FILE__,__LINE__,cd_key2);
 //  memcpy(pub_data_sru->route_data_key,cd_key1,32);
-  
-  	strcpy(pub_data_stru->center_result_code,"00");
-		
-		n=0;
-		asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)pin_key2,32+8,0);
-		n=n+16+4;
-   
-		asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)mac_key2,32+8,0);
-		n=n+16+4;
-   	asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)cd_key2,32+8,0);
-		n=n+16+4;
-    dcs_debug(tmp,n,"<%s> tmp 48 len=%d",__FUNCTION__,n);
-	  add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"48"),
-	  								pub_data_stru->route_msg_type,n,tmp,1);
-	  if( 0>tpos_update_work_key((char *)psam,pin_key1,mac_key1,cd_key1))
-  	   return -1;
-  return 1;
+
+    strcpy(pub_data_stru->center_result_code,"00");
+
+    n=0;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)pin_key2,32+8,0);
+    n=n+16+4;
+
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)mac_key2,32+8,0);
+    n=n+16+4;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)cd_key2,32+8,0);
+    n=n+16+4;
+    dcs_debug(tmp,n,"at %s(%s:%d) tmp 48 len=%d",__FUNCTION__,__FILE__,__LINE__,n);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"48"),
+                  pub_data_stru->route_msg_type,n,tmp,1);
+    if(0>tpos_update_work_key((char *)psam,pin_key1,mac_key1,cd_key1))
+        return -1;
+    return 1;
 }
-int zpos_get_work_key(const char *psam,char *pin_indx,char *mac_indx,char * data_indx,char* pin_key,char *mac_key,char * data_key)
-{
-	char sek_index[6],pin_key1[33],mac_key1[33],cd_key1[33];
-	ICS_DEBUG(0);
-	dcs_debug(0,0,"<%s>begin",__FUNCTION__);
-	memset(sek_index,0,sizeof(sek_index));
-	memset(pin_key1,0,sizeof(pin_key1));
-	memset(mac_key1,0,sizeof(mac_key1));
-	memset(cd_key1,0,sizeof(cd_key1));
-	exec sql select sek_indx,pin_key,mac_key,cd_key into :sek_index,:pin_key1 ,
-		   :mac_key1,:cd_key1  from tpos_key where psam=:psam; 
-  if( sqlca.sqlcode !=0)
-  {
-  	dcs_log(0,0,"<%s> select tpos_key error! \n errmsg:\n%s",__FUNCTION__,sqlca.sqlerrm.sqlerrmc);
-  	return -1;
-  }
-  rtrim(pin_key1);
-  rtrim(sek_index);
-  rtrim(mac_key1);rtrim(cd_key1);
-  memcpy(pin_key,pin_key1,32);
-  memcpy(mac_key,mac_key1,32);
-  memcpy(data_key,cd_key1,32);
-  memcpy(pin_indx,sek_index,5);
-  memcpy(mac_indx,sek_index,5);
-  memcpy(data_indx,sek_index,5);
-  dcs_debug(0,0,"<%s>end",__FUNCTION__);
-  return 1;
+int zpos_get_work_key(const char *psam,char *pin_indx,char *mac_indx,char * data_indx,char* pin_key,char *mac_key,char * data_key) {
+    char sek_index[6],pin_key1[33],mac_key1[33],cd_key1[33];
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    memset(sek_index,0,sizeof(sek_index));
+    memset(pin_key1,0,sizeof(pin_key1));
+    memset(mac_key1,0,sizeof(mac_key1));
+    memset(cd_key1,0,sizeof(cd_key1));
+    exec sql select sek_indx,pin_key,mac_key,cd_key into :sek_index,:pin_key1 ,
+          :mac_key1,:cd_key1  from tpos_key where psam=:psam;
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) select tpos_key error!",__FUNCTION__,__FILE__,__LINE__);
+        return -1;
+    }
+    rtrim(pin_key1);
+    rtrim(sek_index);
+    rtrim(mac_key1);
+    rtrim(cd_key1);
+    memcpy(pin_key,pin_key1,32);
+    memcpy(mac_key,mac_key1,32);
+    memcpy(data_key,cd_key1,32);
+    memcpy(pin_indx,sek_index,5);
+    memcpy(mac_indx,sek_index,5);
+    memcpy(data_indx,sek_index,5);
+    dcs_debug(0,0,"at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return 1;
 }
 
-int zpos_get_ic_data(char *buf, int bSize, char *node_set, int *cnt) //取IC数据，用于断点续传
-{
-	EXEC SQL BEGIN DECLARE SECTION;
-		pub_key_def pub_key;
-		ic_para_def ic_para;
-		int  t_para_step, l, len, i, dlen;
-		char delete_flag[1 + 1], rec_id[3 + 1];
-    EXEC SQL END DECLARE SECTION;
+int zpos_get_ic_data(char *buf, int bSize, char *node_set, int *cnt) { //取IC数据，用于断点续传
+        pub_key_def pub_key;
+        ic_para_def ic_para;
+        int  t_para_step, l, len, i, dlen;
+        char delete_flag[1 + 1], rec_id[3 + 1];
     char tmpbuf[256];
     ICS_DEBUG(0);
     rtrim(node_set);
-   *cnt = 0; len = 0;
-	for(i = 0; i < strlen(node_set); i+=4)
-	{
-		memcpy(rec_id, node_set + i + 1, 3); rec_id[3] = 0;
-		if(*(node_set + i) == '1')
-		{
-		    EXEC SQL SELECT
-		    	REC_ID         ,
-		    	DELETE_FLAG    , 
-		    	PARA_STEP      ,
-				RID          ,
-				RID_INDEX    ,
-				VALID        ,
-				HASH_FLAG    ,
-				PUBKEY_FLAG  ,
-				PUBKEY       ,
-				PUBKEY_INDEX ,
-				PUBKEY_CHECK 
-			INTO
-			    :rec_id                 ,
-			    :delete_flag            ,
-			    :t_para_step            ,
-				:pub_key.rid          ,
-				:pub_key.rid_index    ,
-				:pub_key.valid        ,
-				:pub_key.hash_flag    ,
-				:pub_key.pubkey_flag  ,
-				:pub_key.pubkey       ,
-				:pub_key.pubkey_index ,
-				:pub_key.pubkey_check 			
-			FROM PUB_KEY  
-			WHERE REC_ID = :rec_id;
-			if(sqlca.sqlcode)
-			{
-				dcs_log(0, 0, "<get_ic_data>SELECT PUB_KEY REC_ID=[%s]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", rec_id, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-				return -1;
-			}
-			rtrim(pub_key.rid         );
-			rtrim(pub_key.rid_index   );
-			rtrim(pub_key.valid       );
-			rtrim(pub_key.hash_flag   );
-			rtrim(pub_key.pubkey_flag );
-			rtrim(pub_key.pubkey      );
-			rtrim(pub_key.pubkey_index);
-			rtrim(pub_key.pubkey_check);  
-			*buf++ = '1';
-			l = 0;
-			if(delete_flag[0] == '1')
-			{
-				*buf++ = '1';
-				memcpy(tmpbuf + l, "\x9F\x06\x05", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0); l += 5;
-				memcpy(tmpbuf + l,"\x9F\x22\x01", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0); l += 1;
-			}
-			else
-			{
-				*buf++ = '0';
-				memcpy(tmpbuf + l, "\x9F\x06\x05", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0); l += 5;
-				memcpy(tmpbuf + l,"\x9F\x22\x01", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0); l += 1;
-				memcpy(tmpbuf + l,"\xDF\x05\x08", 3); l += 3;
-				memcpy(tmpbuf + l, pub_key.valid, 8); l += 8;
-				memcpy(tmpbuf + l,"\xDF\x06\x01", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0); l += 1;
-				memcpy(tmpbuf + l,"\xDF\x07\x01", 3); l += 3;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0); l += 1;
-				memcpy(tmpbuf + l,"\xDF\x02", 2); l += 2;
-				dlen = strlen(pub_key.pubkey)/2;
-				if(dlen < 0x80)
-				{
-					*(tmpbuf + l) = dlen; l++;
-				}
-				else if(dlen < 0x100)
-				{
-					*(tmpbuf + l) = 0x81; l++;
-					*(tmpbuf + l) = dlen; l++;
-				}
-				else
-				{
-					*(tmpbuf + l) = 0x82; l++;
-					*(tmpbuf + l) = dlen / 0x100; l++;
-					*(tmpbuf + l) = dlen % 0x100; l++;
-				}
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0); l += strlen(pub_key.pubkey)/2;
-				memcpy(tmpbuf + l,"\xDF\x04", 2); l += 2;
-				*(tmpbuf + l) = strlen(pub_key.pubkey_index)/2; l += 1;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0); l += strlen(pub_key.pubkey_index)/2;
-				memcpy(tmpbuf + l,"\xDF\x03", 2); l += 2;
-				*(tmpbuf + l) = strlen(pub_key.pubkey_check)/2; l += 1;
-				asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0); l += strlen(pub_key.pubkey_check)/2;
-			}
-//			l = strlen(tmpbuf);
-			if(bSize - len > l + 3)
-			{
-				*buf++ = l>>8;
-				*buf++ = l & 0xff;
-				memcpy(buf, tmpbuf, l);
-				buf += l;
-				len += l + 4;
-				(*cnt)++;
-			}
-			else
-				return -1;			
-		}
-		else
-		{
-		    EXEC SQL SELECT
-		    	REC_ID         ,
-		    	DELETE_FLAG    , 
-		    	PARA_STEP      ,
-					AID            ,
-					ASI            ,
-					APP_VER        ,
-					TAC_DEFAULT    ,
-					TAC_ONLINE     ,
-					TAC_REFUSE     ,
-					LOWEST         ,
-					RANDOM_VAL     ,
-					RANDOM_MAX_PER ,
-					RABDOM_PER     ,
-					DDOL           ,
-					PIN            ,
-					LIMIT9F7B      ,
-					LIMITDF19      ,
-					LIMITDF20      ,
-					LIMITDF21      
-				INTO
-			    :rec_id                 ,
-			    :delete_flag            ,
-			    :t_para_step            ,
-					:ic_para.aid            ,
-					:ic_para.asi            ,
-					:ic_para.app_ver        ,
-					:ic_para.tac_default    ,
-					:ic_para.tac_online     ,
-					:ic_para.tac_refuse     ,
-					:ic_para.lowest         ,
-					:ic_para.random_val     ,
-					:ic_para.random_max_per ,
-					:ic_para.rabdom_per     ,
-					:ic_para.ddol           ,
-					:ic_para.pin            ,
-					:ic_para.limit9f7b      ,
-					:ic_para.limitdf19      ,
-					:ic_para.limitdf20      ,
-					:ic_para.limitdf21      
-				FROM IC_PARA  
-				WHERE REC_ID = :rec_id;
-			if(sqlca.sqlcode == 1403) break;
-			if(sqlca.sqlcode)
-			{
-				dcs_log(0, 0, "<get_ic_data>SELECT IC_PARA REC_ID=[%s]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", rec_id, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-				return -1;
-			}
-			rtrim(ic_para.aid            );
-			rtrim(ic_para.asi            );
-			rtrim(ic_para.app_ver        );
-			rtrim(ic_para.tac_default    );
-			rtrim(ic_para.tac_online     );
-			rtrim(ic_para.tac_refuse     );
-			rtrim(ic_para.lowest         );
-			rtrim(ic_para.random_val     );
-			rtrim(ic_para.random_max_per );
-			rtrim(ic_para.rabdom_per     );
-			rtrim(ic_para.ddol           );
-			rtrim(ic_para.pin            );
-			rtrim(ic_para.limit9f7b      );
-			rtrim(ic_para.limitdf19      );
-			rtrim(ic_para.limitdf20      );
-			rtrim(ic_para.limitdf21      );
-			*buf++ = '0';
-			if(delete_flag[0] == '1')
-			{
-				*buf++ = '1';
-				snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
-			}
-			else
-			{
-				*buf++ = '0';
-				snprintf(tmpbuf, sizeof(tmpbuf),"%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", 
-					ic_para.aid            ,
-					ic_para.asi            ,
-					ic_para.app_ver        ,
-					ic_para.tac_default    ,
-					ic_para.tac_online     ,
-					ic_para.tac_refuse     ,
-					ic_para.lowest         ,
-					ic_para.random_val     ,
-					ic_para.random_max_per ,
-					ic_para.rabdom_per     ,
-					ic_para.ddol           ,
-					ic_para.pin            ,
-					ic_para.limit9f7b      ,
-					ic_para.limitdf19      ,
-					ic_para.limitdf20      ,
-					ic_para.limitdf21    );
-			}
-			l = strlen(tmpbuf);
-			if(bSize - len > l/2 + 3)
-			{
-				*buf++ = (l/2)>>8;
-				*buf++ = (l/2) & 0xff;
-				asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
-				buf += l/2;
-				len += l/2 + 4;
-				(*cnt)++;
-			}
-			else
-				return -1;
-		}
-	}
-	return len;
+    *cnt = 0;
+    len = 0;
+    for(i = 0; i < strlen(node_set); i+=4) {
+        memcpy(rec_id, node_set + i + 1, 3);
+        rec_id[3] = 0;
+        if(*(node_set + i) == '1') {
+            EXEC SQL SELECT
+              REC_ID         ,
+              DELETE_FLAG    ,
+              PARA_STEP      ,
+            RID          ,
+            RID_INDEX    ,
+            VALID        ,
+            HASH_FLAG    ,
+            PUBKEY_FLAG  ,
+            PUBKEY       ,
+            PUBKEY_INDEX ,
+            PUBKEY_CHECK
+            INTO
+            :rec_id                 ,
+            :delete_flag            ,
+            :t_para_step            ,
+            :pub_key.rid          ,
+            :pub_key.rid_index    ,
+            :pub_key.valid        ,
+            :pub_key.hash_flag    ,
+            :pub_key.pubkey_flag  ,
+            :pub_key.pubkey       ,
+            :pub_key.pubkey_index ,
+            :pub_key.pubkey_check
+            FROM PUB_KEY
+            WHERE REC_ID = :rec_id;
+            if(sqlca.sqlcode) {
+                dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT PUB_KEY REC_ID=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, rec_id);
+                return -1;
+            }
+            rtrim(pub_key.rid);
+            rtrim(pub_key.rid_index);
+            rtrim(pub_key.valid);
+            rtrim(pub_key.hash_flag);
+            rtrim(pub_key.pubkey_flag);
+            rtrim(pub_key.pubkey);
+            rtrim(pub_key.pubkey_index);
+            rtrim(pub_key.pubkey_check);
+            *buf++ = '1';
+            l = 0;
+            if(delete_flag[0] == '1') {
+                *buf++ = '1';
+                memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+                l += 5;
+                memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0);
+                l += 1;
+            } else {
+                *buf++ = '0';
+                memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+                l += 5;
+                memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x05\x08", 3);
+                l += 3;
+                memcpy(tmpbuf + l, pub_key.valid, 8);
+                l += 8;
+                memcpy(tmpbuf + l,"\xDF\x06\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x07\x01", 3);
+                l += 3;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0);
+                l += 1;
+                memcpy(tmpbuf + l,"\xDF\x02", 2);
+                l += 2;
+                dlen = strlen(pub_key.pubkey)/2;
+                if(dlen < 0x80) {
+                    *(tmpbuf + l) = dlen;
+                    l++;
+                } else if(dlen < 0x100) {
+                    *(tmpbuf + l) = 0x81;
+                    l++;
+                    *(tmpbuf + l) = dlen;
+                    l++;
+                } else {
+                    *(tmpbuf + l) = 0x82;
+                    l++;
+                    *(tmpbuf + l) = dlen / 0x100;
+                    l++;
+                    *(tmpbuf + l) = dlen % 0x100;
+                    l++;
+                }
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0);
+                l += strlen(pub_key.pubkey)/2;
+                memcpy(tmpbuf + l,"\xDF\x04", 2);
+                l += 2;
+                *(tmpbuf + l) = strlen(pub_key.pubkey_index)/2;
+                l += 1;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0);
+                l += strlen(pub_key.pubkey_index)/2;
+                memcpy(tmpbuf + l,"\xDF\x03", 2);
+                l += 2;
+                *(tmpbuf + l) = strlen(pub_key.pubkey_check)/2;
+                l += 1;
+                asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0);
+                l += strlen(pub_key.pubkey_check)/2;
+            }
+//          l = strlen(tmpbuf);
+            if(bSize - len > l + 3) {
+                *buf++ = l>>8;
+                *buf++ = l & 0xff;
+                memcpy(buf, tmpbuf, l);
+                buf += l;
+                len += l + 4;
+                (*cnt)++;
+            } else
+                return -1;
+        } else {
+            EXEC SQL SELECT
+              REC_ID         ,
+              DELETE_FLAG    ,
+              PARA_STEP      ,
+            AID            ,
+            ASI            ,
+            APP_VER        ,
+            TAC_DEFAULT    ,
+            TAC_ONLINE     ,
+            TAC_REFUSE     ,
+            LOWEST         ,
+            RANDOM_VAL     ,
+            RANDOM_MAX_PER ,
+            RABDOM_PER     ,
+            DDOL           ,
+            PIN            ,
+            LIMIT9F7B      ,
+            LIMITDF19      ,
+            LIMITDF20      ,
+            LIMITDF21
+            INTO
+            :rec_id                 ,
+            :delete_flag            ,
+            :t_para_step            ,
+            :ic_para.aid            ,
+            :ic_para.asi            ,
+            :ic_para.app_ver        ,
+            :ic_para.tac_default    ,
+            :ic_para.tac_online     ,
+            :ic_para.tac_refuse     ,
+            :ic_para.lowest         ,
+            :ic_para.random_val     ,
+            :ic_para.random_max_per ,
+            :ic_para.rabdom_per     ,
+            :ic_para.ddol           ,
+            :ic_para.pin            ,
+            :ic_para.limit9f7b      ,
+            :ic_para.limitdf19      ,
+            :ic_para.limitdf20      ,
+            :ic_para.limitdf21
+            FROM IC_PARA
+            WHERE REC_ID = :rec_id;
+            if(sqlca.sqlcode == 1403) break;
+            if(sqlca.sqlcode) {
+                dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT IC_PARA REC_ID=[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, rec_id);
+                return -1;
+            }
+            rtrim(ic_para.aid);
+            rtrim(ic_para.asi);
+            rtrim(ic_para.app_ver);
+            rtrim(ic_para.tac_default);
+            rtrim(ic_para.tac_online);
+            rtrim(ic_para.tac_refuse);
+            rtrim(ic_para.lowest);
+            rtrim(ic_para.random_val);
+            rtrim(ic_para.random_max_per);
+            rtrim(ic_para.rabdom_per);
+            rtrim(ic_para.ddol);
+            rtrim(ic_para.pin);
+            rtrim(ic_para.limit9f7b);
+            rtrim(ic_para.limitdf19);
+            rtrim(ic_para.limitdf20);
+            rtrim(ic_para.limitdf21);
+            *buf++ = '0';
+            if(delete_flag[0] == '1') {
+                *buf++ = '1';
+                snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
+            } else {
+                *buf++ = '0';
+                snprintf(tmpbuf, sizeof(tmpbuf),"%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+                         ic_para.aid            ,
+                         ic_para.asi            ,
+                         ic_para.app_ver        ,
+                         ic_para.tac_default    ,
+                         ic_para.tac_online     ,
+                         ic_para.tac_refuse     ,
+                         ic_para.lowest         ,
+                         ic_para.random_val     ,
+                         ic_para.random_max_per ,
+                         ic_para.rabdom_per     ,
+                         ic_para.ddol           ,
+                         ic_para.pin            ,
+                         ic_para.limit9f7b      ,
+                         ic_para.limitdf19      ,
+                         ic_para.limitdf20      ,
+                         ic_para.limitdf21);
+            }
+            l = strlen(tmpbuf);
+            if(bSize - len > l/2 + 3) {
+                *buf++ = (l/2)>>8;
+                *buf++ = (l/2) & 0xff;
+                asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
+                buf += l/2;
+                len += l/2 + 4;
+                (*cnt)++;
+            } else
+                return -1;
+        }
+    }
+    return len;
 }
 
-int zpos_get_aid_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt)
-{
-	EXEC SQL BEGIN DECLARE SECTION;
-		ic_para_def ic_para;
-		int para_step, t_para_step, l, len;
-		char delete_flag[1 + 1], rec_id[3 + 1];
-    EXEC SQL END DECLARE SECTION;
+int zpos_get_aid_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt) {
+        ic_para_def ic_para;
+        int para_step, t_para_step, l, len;
+        char delete_flag[1 + 1], rec_id[3 + 1];
     char tmpbuf[256];
     ICS_DEBUG(0);
-    dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
     *cnt = 0;
     para_step = *last_ic_para_step;
     memset(&ic_para, 0, sizeof(ic_para_def));
     EXEC SQL DECLARE G_IC_PARA_CUR CURSOR FOR
     SELECT *
     FROM
-    ( 
-	    SELECT
-	    	REC_ID         ,
-	    	DELETE_FLAG    , 
-	    	PARA_STEP      ,
-			AID            ,
-			ASI            ,
-			APP_VER        ,
-			TAC_DEFAULT    ,
-			TAC_ONLINE     ,
-			TAC_REFUSE     ,
-			LOWEST         ,
-			RANDOM_VAL     ,
-			RANDOM_MAX_PER ,
-			RABDOM_PER     ,
-			DDOL           ,
-			PIN            ,
-			LIMIT9F7B      ,
-			LIMITDF19      ,
-			LIMITDF20      ,
-			LIMITDF21      
-		FROM IC_PARA  
-		WHERE 
-			PARA_STEP > :para_step
-		ORDER BY PARA_STEP
-	);
-	EXEC SQL OPEN G_IC_PARA_CUR;
-	if (sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<get_aid_data>OPEN IC_PARA_CUR PARA_STEP=[%d]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", para_step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-	}
-	len = 0;
-	while(1)
-	{
-		EXEC SQL FETCH G_IC_PARA_CUR INTO 
-		    :rec_id                 ,
-		    :delete_flag            ,
-		    :t_para_step            ,
-			:ic_para.aid            ,
-			:ic_para.asi            ,
-			:ic_para.app_ver        ,
-			:ic_para.tac_default    ,
-			:ic_para.tac_online     ,
-			:ic_para.tac_refuse     ,
-			:ic_para.lowest         ,
-			:ic_para.random_val     ,
-			:ic_para.random_max_per ,
-			:ic_para.rabdom_per     ,
-			:ic_para.ddol           ,
-			:ic_para.pin            ,
-			:ic_para.limit9f7b      ,
-			:ic_para.limitdf19      ,
-			:ic_para.limitdf20      ,
-			:ic_para.limitdf21      ;
-		if(sqlca.sqlcode == 1403) break;
-		if(sqlca.sqlcode)
-		{
-			dcs_log(0, 0, "<get_aid_data>FETCH G_IC_PARA_CUR PARA_STEP=[%d]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", para_step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-			EXEC SQL CLOSE G_IC_PARA_CUR;
-			return -1;
-		}
-		rtrim(ic_para.aid            );
-		rtrim(ic_para.asi            );
-		rtrim(ic_para.app_ver        );
-		rtrim(ic_para.tac_default    );
-		rtrim(ic_para.tac_online     );
-		rtrim(ic_para.tac_refuse     );
-		rtrim(ic_para.lowest         );
-		rtrim(ic_para.random_val     );
-		rtrim(ic_para.random_max_per );
-		rtrim(ic_para.rabdom_per     );
-		rtrim(ic_para.ddol           );
-		rtrim(ic_para.pin            );
-		rtrim(ic_para.limit9f7b      );
-		rtrim(ic_para.limitdf19      );
-		rtrim(ic_para.limitdf20      );
-		rtrim(ic_para.limitdf21      );
-		*buf++ = '0';
-		if(delete_flag[0] == '1')
-		{
-			*buf++ = '1';
-			snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
-		}
-		else
-		{
-			*buf++ = '0';
-			snprintf(tmpbuf,sizeof(tmpbuf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", 
-				ic_para.aid            ,
-				ic_para.asi            ,
-				ic_para.app_ver        ,
-				ic_para.tac_default    ,
-				ic_para.tac_online     ,
-				ic_para.tac_refuse     ,
-				ic_para.lowest         ,
-				ic_para.random_val     ,
-				ic_para.random_max_per ,
-				ic_para.rabdom_per     ,
-				ic_para.ddol           ,
-				ic_para.pin            ,
-				ic_para.limit9f7b      ,
-				ic_para.limitdf19      ,
-				ic_para.limitdf20      ,
-				ic_para.limitdf21    );
-		}
-		l = strlen(tmpbuf);
-		if(bSize - len > l/2 + 3)
-		{
-			*buf++ = (l/2)>>8;
-			*buf++ = (l/2) & 0xff;
-			asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
-			buf += l/2;
-			len += l/2 + 4;
-			*(node_set + *cnt * 4) = '0';
-			memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
-			(*cnt)++;
-			*last_ic_para_step = t_para_step;
-		}
-		else
-			break;
-		if(bSize < 23)
-			break;
-	}
-	EXEC SQL CLOSE G_IC_PARA_CUR;
-	dcs_debug(0,0,"<%s> end",__FUNCTION__);
-	return len;
+    (
+        SELECT
+           REC_ID         ,
+           DELETE_FLAG    ,
+           PARA_STEP      ,
+        AID            ,
+        ASI            ,
+        APP_VER        ,
+        TAC_DEFAULT    ,
+        TAC_ONLINE     ,
+        TAC_REFUSE     ,
+        LOWEST         ,
+        RANDOM_VAL     ,
+        RANDOM_MAX_PER ,
+        RABDOM_PER     ,
+        DDOL           ,
+        PIN            ,
+        LIMIT9F7B      ,
+        LIMITDF19      ,
+        LIMITDF20      ,
+        LIMITDF21
+       FROM IC_PARA
+       WHERE
+        PARA_STEP > :para_step
+       ORDER BY PARA_STEP
+    );
+    EXEC SQL OPEN G_IC_PARA_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN IC_PARA_CUR PARA_STEP=[%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+        return -1;
+    }
+    len = 0;
+    while(1) {
+        EXEC SQL FETCH G_IC_PARA_CUR INTO
+           :rec_id                 ,
+           :delete_flag            ,
+           :t_para_step            ,
+        :ic_para.aid            ,
+        :ic_para.asi            ,
+        :ic_para.app_ver        ,
+        :ic_para.tac_default    ,
+        :ic_para.tac_online     ,
+        :ic_para.tac_refuse     ,
+        :ic_para.lowest         ,
+        :ic_para.random_val     ,
+        :ic_para.random_max_per ,
+        :ic_para.rabdom_per     ,
+        :ic_para.ddol           ,
+        :ic_para.pin            ,
+        :ic_para.limit9f7b      ,
+        :ic_para.limitdf19      ,
+        :ic_para.limitdf20      ,
+        :ic_para.limitdf21      ;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH G_IC_PARA_CUR PARA_STEP=[%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+            EXEC SQL CLOSE G_IC_PARA_CUR;
+            return -1;
+        }
+        rtrim(ic_para.aid);
+        rtrim(ic_para.asi);
+        rtrim(ic_para.app_ver);
+        rtrim(ic_para.tac_default);
+        rtrim(ic_para.tac_online);
+        rtrim(ic_para.tac_refuse);
+        rtrim(ic_para.lowest);
+        rtrim(ic_para.random_val);
+        rtrim(ic_para.random_max_per);
+        rtrim(ic_para.rabdom_per);
+        rtrim(ic_para.ddol);
+        rtrim(ic_para.pin);
+        rtrim(ic_para.limit9f7b);
+        rtrim(ic_para.limitdf19);
+        rtrim(ic_para.limitdf20);
+        rtrim(ic_para.limitdf21);
+        *buf++ = '0';
+        if(delete_flag[0] == '1') {
+            *buf++ = '1';
+            snprintf(tmpbuf,sizeof(tmpbuf), "%s", ic_para.aid);
+        } else {
+            *buf++ = '0';
+            snprintf(tmpbuf,sizeof(tmpbuf), "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+                     ic_para.aid            ,
+                     ic_para.asi            ,
+                     ic_para.app_ver        ,
+                     ic_para.tac_default    ,
+                     ic_para.tac_online     ,
+                     ic_para.tac_refuse     ,
+                     ic_para.lowest         ,
+                     ic_para.random_val     ,
+                     ic_para.random_max_per ,
+                     ic_para.rabdom_per     ,
+                     ic_para.ddol           ,
+                     ic_para.pin            ,
+                     ic_para.limit9f7b      ,
+                     ic_para.limitdf19      ,
+                     ic_para.limitdf20      ,
+                     ic_para.limitdf21);
+        }
+        l = strlen(tmpbuf);
+        if(bSize - len > l/2 + 3) {
+            *buf++ = (l/2)>>8;
+            *buf++ = (l/2) & 0xff;
+            asc_to_bcd((unsigned char *)buf, (unsigned char *)tmpbuf, l, 0);
+            buf += l/2;
+            len += l/2 + 4;
+            *(node_set + *cnt * 4) = '0';
+            memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
+            (*cnt)++;
+            *last_ic_para_step = t_para_step;
+        } else
+            break;
+        if(bSize < 23)
+            break;
+    }
+    EXEC SQL CLOSE G_IC_PARA_CUR;
+    dcs_debug(0,0,"at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return len;
 }
 
-int zpos_get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt)
-{
-	EXEC SQL BEGIN DECLARE SECTION;
-		pub_key_def pub_key;
-		int para_step, t_para_step, l, len, dlen;
-		char delete_flag[1 + 1], rec_id[3 + 1];
-    EXEC SQL END DECLARE SECTION;
+int zpos_get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt) {
+        pub_key_def pub_key;
+        int para_step, t_para_step, l, len, dlen;
+        char delete_flag[1 + 1], rec_id[3 + 1];
     char tmpbuf[1024];
     ICS_DEBUG(0);
-    dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
     *cnt = 0;
     para_step = *last_ic_para_step;
     memset(&pub_key, 0, sizeof(pub_key_def));
-  
-    	EXEC SQL DECLARE G_PUB_KEY_CUR CURSOR FOR
-		    SELECT *
-		    FROM
-		    ( 
-			    SELECT
-			    	REC_ID         ,
-			    	DELETE_FLAG    , 
-			    	PARA_STEP      ,
-					RID          ,
-					RID_INDEX    ,
-					VALID        ,
-					HASH_FLAG    ,
-					PUBKEY_FLAG  ,
-					PUBKEY       ,
-					PUBKEY_INDEX ,
-					PUBKEY_CHECK 
-				FROM PUB_KEY  
-				WHERE sm_flag = '0' and
-					PARA_STEP > :para_step
-				ORDER BY PARA_STEP
-			);
 
-	EXEC SQL OPEN G_PUB_KEY_CUR;
-	if (sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<get_pubkey_data>OPEN G_PUB_KEY_CUR PARA_STEP=[%d]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", para_step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-	}
-	len = 0;
-	while(1)
-	{
-		EXEC SQL FETCH G_PUB_KEY_CUR INTO 
-		    :rec_id                 ,
-		    :delete_flag            ,
-		    :t_para_step            ,
-			:pub_key.rid          ,
-			:pub_key.rid_index    ,
-			:pub_key.valid        ,
-			:pub_key.hash_flag    ,
-			:pub_key.pubkey_flag  ,
-			:pub_key.pubkey       ,
-			:pub_key.pubkey_index ,
-			:pub_key.pubkey_check ;
-		if(sqlca.sqlcode == 1403) break;
-		if(sqlca.sqlcode)
-		{
-			dcs_log(0, 0, "<get_pubkey_data>FETCH PUB_KEY_CUR PARA_STEP=[%d]!\n[sqlCode:%d]errmsg:\n----------\n%s\n", para_step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-			EXEC SQL CLOSE G_PUB_KEY_CUR;
-			return -1;
-		}
-		rtrim(pub_key.rid         );
-		rtrim(pub_key.rid_index   );
-		rtrim(pub_key.valid       );
-		rtrim(pub_key.hash_flag   );
-		rtrim(pub_key.pubkey_flag );
-		rtrim(pub_key.pubkey      );
-		rtrim(pub_key.pubkey_index);
-		rtrim(pub_key.pubkey_check);  
-		*buf++ = '1';
-		l = 0;
-		if(delete_flag[0] == '1')
-		{
-			*buf++ = '1';
-			memcpy(tmpbuf + l, "\x9F\x06\x05", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid, 10, 0); l += 5;
-			memcpy(tmpbuf + l,"\x9F\x22\x01", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0); l += 1;
-		}
-		else
-		{
-			*buf++ = '0';
-			memcpy(tmpbuf + l, "\x9F\x06\x05", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0); l += 5;
-			memcpy(tmpbuf + l,"\x9F\x22\x01", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0); l += 1;
-			memcpy(tmpbuf + l,"\xDF\x05\x08", 3); l += 3;
-			memcpy(tmpbuf + l, pub_key.valid, 8); l += 8;
-			memcpy(tmpbuf + l,"\xDF\x06\x01", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0); l += 1;
-			memcpy(tmpbuf + l,"\xDF\x07\x01", 3); l += 3;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0); l += 1;
-			memcpy(tmpbuf + l,"\xDF\x02", 2); l += 2;
-			dlen = strlen(pub_key.pubkey)/2;
-			if(dlen < 0x80)
-			{
-				*(tmpbuf + l) = dlen; l++;
-			}
-			else if(dlen < 0x100)
-			{
-				*(tmpbuf + l) = 0x81; l++;
-				*(tmpbuf + l) = dlen; l++;
-			}
-			else
-			{
-				*(tmpbuf + l) = 0x80; l++;
-				*(tmpbuf + l) = dlen / 0x100; l++;
-				*(tmpbuf + l) = dlen % 0x100; l++;
-			}
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0); l += strlen(pub_key.pubkey)/2;
-			memcpy(tmpbuf + l,"\xDF\x04", 2); l += 2;
-			*(tmpbuf + l) = strlen(pub_key.pubkey_index)/2; l += 1;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0); l += strlen(pub_key.pubkey_index)/2;
-			memcpy(tmpbuf + l,"\xDF\x03", 2); l += 2;
-			*(tmpbuf + l) = strlen(pub_key.pubkey_check)/2; l += 1;
-			asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0); l += strlen(pub_key.pubkey_check)/2;
-		}
-//		l = strlen(tmpbuf);
-		if(bSize - len > l + 3)
-		{
-			*buf++ = l>>8;
-			*buf++ = l & 0xff;
-			memcpy(buf, tmpbuf, l);
-			buf += l;
-			len += l + 4;
-			*(node_set + *cnt * 4) = '1';
-			memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
-			(*cnt)++;
-			*last_ic_para_step = t_para_step;
-		}
-		else
-			break;
-		if(bSize < 23)
-			break;
-	}
-	EXEC SQL CLOSE G_PUB_KEY_CUR;
-	dcs_debug(0, 0, "<%s> end",__FUNCTION__);
-	return len;
+    EXEC SQL DECLARE G_PUB_KEY_CUR CURSOR FOR
+       SELECT *
+       FROM
+       (
+        SELECT
+          REC_ID         ,
+          DELETE_FLAG    ,
+          PARA_STEP      ,
+        RID          ,
+        RID_INDEX    ,
+        VALID        ,
+        HASH_FLAG    ,
+        PUBKEY_FLAG  ,
+        PUBKEY       ,
+        PUBKEY_INDEX ,
+        PUBKEY_CHECK
+      FROM PUB_KEY
+      WHERE sm_flag = '0' and
+        PARA_STEP > :para_step
+      ORDER BY PARA_STEP
+    );
+
+    EXEC SQL OPEN G_PUB_KEY_CUR;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, OPEN G_PUB_KEY_CUR PARA_STEP=[%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+        return -1;
+    }
+    len = 0;
+    while(1) {
+        EXEC SQL FETCH G_PUB_KEY_CUR INTO
+           :rec_id                 ,
+           :delete_flag            ,
+           :t_para_step            ,
+        :pub_key.rid          ,
+        :pub_key.rid_index    ,
+        :pub_key.valid        ,
+        :pub_key.hash_flag    ,
+        :pub_key.pubkey_flag  ,
+        :pub_key.pubkey       ,
+        :pub_key.pubkey_index ,
+        :pub_key.pubkey_check ;
+        if(sqlca.sqlcode == 1403) break;
+        if(sqlca.sqlcode) {
+            dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, FETCH PUB_KEY_CUR PARA_STEP=[%d]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, para_step);
+            EXEC SQL CLOSE G_PUB_KEY_CUR;
+            return -1;
+        }
+        rtrim(pub_key.rid);
+        rtrim(pub_key.rid_index);
+        rtrim(pub_key.valid);
+        rtrim(pub_key.hash_flag);
+        rtrim(pub_key.pubkey_flag);
+        rtrim(pub_key.pubkey);
+        rtrim(pub_key.pubkey_index);
+        rtrim(pub_key.pubkey_check);
+        *buf++ = '1';
+        l = 0;
+        if(delete_flag[0] == '1') {
+            *buf++ = '1';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid_index, 2, 0);
+            l += 1;
+        } else {
+            *buf++ = '0';
+            memcpy(tmpbuf + l, "\x9F\x06\x05", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.rid, 10, 0);
+            l += 5;
+            memcpy(tmpbuf + l,"\x9F\x22\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l,(unsigned char *) pub_key.rid_index, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x05\x08", 3);
+            l += 3;
+            memcpy(tmpbuf + l, pub_key.valid, 8);
+            l += 8;
+            memcpy(tmpbuf + l,"\xDF\x06\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.hash_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x07\x01", 3);
+            l += 3;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_flag, 2, 0);
+            l += 1;
+            memcpy(tmpbuf + l,"\xDF\x02", 2);
+            l += 2;
+            dlen = strlen(pub_key.pubkey)/2;
+            if(dlen < 0x80) {
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else if(dlen < 0x100) {
+                *(tmpbuf + l) = 0x81;
+                l++;
+                *(tmpbuf + l) = dlen;
+                l++;
+            } else {
+                *(tmpbuf + l) = 0x80;
+                l++;
+                *(tmpbuf + l) = dlen / 0x100;
+                l++;
+                *(tmpbuf + l) = dlen % 0x100;
+                l++;
+            }
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey,  strlen(pub_key.pubkey), 0);
+            l += strlen(pub_key.pubkey)/2;
+            memcpy(tmpbuf + l,"\xDF\x04", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_index)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_index,  strlen(pub_key.pubkey_index), 0);
+            l += strlen(pub_key.pubkey_index)/2;
+            memcpy(tmpbuf + l,"\xDF\x03", 2);
+            l += 2;
+            *(tmpbuf + l) = strlen(pub_key.pubkey_check)/2;
+            l += 1;
+            asc_to_bcd((unsigned char *)tmpbuf + l, (unsigned char *)pub_key.pubkey_check,  strlen(pub_key.pubkey_check), 0);
+            l += strlen(pub_key.pubkey_check)/2;
+        }
+//      l = strlen(tmpbuf);
+        if(bSize - len > l + 3) {
+            *buf++ = l>>8;
+            *buf++ = l & 0xff;
+            memcpy(buf, tmpbuf, l);
+            buf += l;
+            len += l + 4;
+            *(node_set + *cnt * 4) = '1';
+            memcpy(node_set + *cnt * 4 + 1, rec_id, 3);
+            (*cnt)++;
+            *last_ic_para_step = t_para_step;
+        } else
+            break;
+        if(bSize < 23)
+            break;
+    }
+    EXEC SQL CLOSE G_PUB_KEY_CUR;
+    dcs_debug(0, 0, "at %s(%s:%d) end",__FUNCTION__,__FILE__,__LINE__);
+    return len;
 }
 
-int count_aid(int step)
-{
-	int cnt;
-	exec sql select count(1) into :cnt  from IC_PARA where PARA_STEP > :step;
-	if (sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<%s>stemp=%d err code=%d(%s)",__FUNCTION__, step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-	}
-	return cnt;
+int count_aid(int step) {
+    int cnt;
+    exec sql select count(1) into :cnt  from IC_PARA where PARA_STEP > :step;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, stemp=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, step);
+        return -1;
+    }
+    return cnt;
 }
 
-int count_pubkey( int step)
-{
-	int cnt;
-	exec sql select count(1) into :cnt  from PUB_KEY where PARA_STEP > :step;
-	if (sqlca.sqlcode)
-	{
-		dcs_log(0, 0, "<%s>stemp=%d err code=%d(%s)",__FUNCTION__, step, sqlca.sqlcode, sqlca.sqlerrm.sqlerrmc); 
-		return -1;
-	}
-	return cnt;
+int count_pubkey(int step) {
+    int cnt;
+    exec sql select count(1) into :cnt  from PUB_KEY where PARA_STEP > :step;
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, stemp=%d",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, step);
+        return -1;
+    }
+    return cnt;
 }
-int insti_gen_work_key(glob_msg_stru *pub_data_stru)
-{
-	char pin_indx[6],mac_indx[6],pin_key1[33],pin_key2[33+8],pin_tmk[33],data_indx[6];
-	char tmp[256],mac_key1[33],mac_key2[33+8],cd_key1[33],cd_key2[33+8],mac_tmk[33];
-	int n;
-	ICS_DEBUG(0);
-	dcs_debug(0,0,"<%s>begin",__FUNCTION__);
-	memset(pin_indx,0,sizeof(pin_indx));
-	memset(mac_indx,0,sizeof(mac_indx));
-	memset(data_indx,0,sizeof(data_indx));
-	memset(pin_key1,0,sizeof(pin_key1));
-	memset(pin_key2,0,sizeof(pin_key2));
-	memset(mac_key1,0,sizeof(mac_key1));
-	memset(mac_key2,0,sizeof(mac_key2));
-	memset(cd_key1,0,sizeof(cd_key1));
-	memset(cd_key2,0,sizeof(cd_key2));
-	memset(mac_tmk,0,sizeof(mac_tmk));
-	memset(pin_tmk,0,sizeof(pin_tmk));
-	exec sql select pin_index,mac_index,data_index,pin_tmk,mac_tmk into 
-	     :pin_indx,:mac_indx,:data_indx,:pin_tmk,:mac_tmk
-	     from INSTI_INFO where insti_code=:pub_data_stru->insti_code;
-	
-  if( sqlca.sqlcode !=0)
-  {
-  	dcs_log(0,0,"<%s> select INSTI_INFO error! \n errmsg:\n%s",__FUNCTION__,sqlca.sqlerrm.sqlerrmc);
-  	return -1;
-  }
-	 if( 0>_tpos_get_key32(pin_indx,pin_indx,pin_tmk,pin_key1,pin_key2))
-	  {
-	  		dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! pin_indx=%s,pin_tmk=%s",pin_indx,pin_tmk);
-	  		return -1;
-	  }
-	  dcs_debug(0,0,"<tpos_gen_work_key>, pin_key=%s",pin_key2);
-	//  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
-	  if (0 >_tpos_get_key32(mac_indx,mac_indx,mac_tmk,mac_key1,mac_key2))
-	  {
-	  	dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! mac_indx=%s,tm_key=%s",mac_indx,mac_tmk);
-	  	return -1;
-	  }
-	  dcs_debug(0,0,"<%s>, copy new mac to in_mac_key",__FUNCTION__);
-	   memcpy(pub_data_stru->in_mac_key,mac_key1,32);
-	  memcpy(pub_data_stru->route_mac_key,mac_key1,32);
-	  snprintf(pub_data_stru->route_mac_index,5,"%s",mac_indx);
-	  dcs_debug(mac_key1,32,"<tpos_gen_work_key>, mac_key2=%s",mac_key2);
-	  if(0>_tpos_get_key32(pin_indx,pin_indx,pin_tmk,cd_key1,cd_key2))
-	  {
-	  	dcs_log(0,0,"<tpos_gen_work_key> _tpos_get_key32 error! data_indx=%s, data_tmk=%s",data_indx,pin_tmk);
-	  	return -1;
-	  }
-	  dcs_debug(0,0,"<tpos_gen_work_key>, data_key=%s",cd_key2);
+int insti_gen_work_key(glob_msg_stru *pub_data_stru) {
+    char pin_indx[6],mac_indx[6],pin_key1[33],pin_key2[33+8],pin_tmk[33],data_indx[6];
+    char tmp[256],mac_key1[33],mac_key2[33+8],cd_key1[33],cd_key2[33+8],mac_tmk[33];
+    int n;
+    ICS_DEBUG(0);
+    dcs_debug(0,0,"at %s(%s:%d) begin",__FUNCTION__,__FILE__,__LINE__);
+    memset(pin_indx,0,sizeof(pin_indx));
+    memset(mac_indx,0,sizeof(mac_indx));
+    memset(data_indx,0,sizeof(data_indx));
+    memset(pin_key1,0,sizeof(pin_key1));
+    memset(pin_key2,0,sizeof(pin_key2));
+    memset(mac_key1,0,sizeof(mac_key1));
+    memset(mac_key2,0,sizeof(mac_key2));
+    memset(cd_key1,0,sizeof(cd_key1));
+    memset(cd_key2,0,sizeof(cd_key2));
+    memset(mac_tmk,0,sizeof(mac_tmk));
+    memset(pin_tmk,0,sizeof(pin_tmk));
+    exec sql select pin_index,mac_index,data_index,pin_tmk,mac_tmk into
+         :pin_indx,:mac_indx,:data_indx,:pin_tmk,:mac_tmk
+         from INSTI_INFO where insti_code=:pub_data_stru->insti_code;
+
+    if(sqlca.sqlcode !=0) {
+        dcs_log(0,0,"at %s(%s:%d) sqlcode=%d, select INSTI_INFO error",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
+        return -1;
+    }
+    if(0>_tpos_get_key32(pin_indx,pin_indx,pin_tmk,pin_key1,pin_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! pin_indx=%s,pin_tmk=%s",__FUNCTION__,__FILE__,__LINE__,pin_indx,pin_tmk);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) pin_key=%s",__FUNCTION__,__FILE__,__LINE__,pin_key2);
+    //  asc_to_bcd(pub_data_sru->route_pin_key,pin_key2,32,0);
+    if(0 >_tpos_get_key32(mac_indx,mac_indx,mac_tmk,mac_key1,mac_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! mac_indx=%s,tm_key=%s",__FUNCTION__,__FILE__,__LINE__,mac_indx,mac_tmk);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) copy new mac to in_mac_key",__FUNCTION__,__FILE__,__LINE__);
+    memcpy(pub_data_stru->in_mac_key,mac_key1,32);
+    memcpy(pub_data_stru->route_mac_key,mac_key1,32);
+    snprintf(pub_data_stru->route_mac_index,5,"%s",mac_indx);
+    dcs_debug(mac_key1,32,"at %s(%s:%d) mac_key2=%s",__FUNCTION__,__FILE__,__LINE__,mac_key2);
+    if(0>_tpos_get_key32(pin_indx,pin_indx,pin_tmk,cd_key1,cd_key2)) {
+        dcs_log(0,0,"at %s(%s:%d) _tpos_get_key32 error! data_indx=%s, data_tmk=%s",__FUNCTION__,__FILE__,__LINE__,data_indx,pin_tmk);
+        return -1;
+    }
+    dcs_debug(0,0,"at %s(%s:%d) data_key=%s",__FUNCTION__,__FILE__,__LINE__,cd_key2);
 //  memcpy(pub_data_sru->route_data_key,cd_key1,32);
-  
-  	strcpy(pub_data_stru->center_result_code,"00");
-		
-		n=0;
-		asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)pin_key2,32+8,0);
-		n=n+16+4;
+
+    strcpy(pub_data_stru->center_result_code,"00");
+
+    n=0;
+    asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)pin_key2,32+8,0);
+    n=n+16+4;
     asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)mac_key2,32+8,0);
-		n=n+16+4;
-   	if ( memcmp(pub_data_stru->in_msg_type,"LINS",4)!=0)
-    {
-	   	asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)cd_key2,32+8,0);
-			n=n+16+4;
-	  }
-    dcs_debug(tmp,n,"<%s> tmp 48 len=%d",__FUNCTION__,n);
-	  add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"48"),
-	  								pub_data_stru->route_msg_type,n,tmp,1);
-	  if( 0>insti_update_work_key(pub_data_stru->insti_code,pin_key1,mac_key1,cd_key1))
-  	   return -1;
-  return 1;
+    n=n+16+4;
+    if(memcmp(pub_data_stru->in_msg_type,"LINS",4)!=0) {
+        asc_to_bcd((unsigned char *)tmp+n,(unsigned char *)cd_key2,32+8,0);
+        n=n+16+4;
+    }
+    dcs_debug(tmp,n,"at %s(%s:%d) tmp 48 len=%d",__FUNCTION__,__FILE__,__LINE__,n);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"48"),
+                  pub_data_stru->route_msg_type,n,tmp,1);
+    if(0>insti_update_work_key(pub_data_stru->insti_code,pin_key1,mac_key1,cd_key1))
+        return -1;
+    return 1;
 }
