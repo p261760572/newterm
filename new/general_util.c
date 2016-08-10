@@ -3332,9 +3332,6 @@ int conver_data(glob_msg_stru * pub_data_stru,int flag) {
         if(0>priv_field_conver(pub_data_stru))return -1;
 //          dcs_debug(0,0,"<%s> resp priv_field_conver end",__FUNCTION__);
     }
-    dcs_debug(0, 0, "at %s(%s:%d), msg_type[%s], trans_type[%s], switch_flag=%x, app_type=%s,route_num=%x",
-    					__FUNCTION__,__FILE__,__LINE__, pub_data_stru->route_msg_type, pub_data_stru->route_trans_type,
-    					pub_data_stru->switch_src_flag,pub_data_stru->app_type,pub_data_stru->route_num);
 //  dcs_debug(0,0,"<%s> end",__FUNCTION__);
     return 1;
 }
