@@ -1977,7 +1977,7 @@ int tpos_gen_field_conver(char *para, short fldid, glob_msg_stru *pub_data_stru)
             if(tmp[0] == '0') outPanFlag = 0;
             p=my_split(p,',',tmp,sizeof(tmp));
         }
-        if(0 > get_field_data_safe(pub_data_stru,
+        if(0 >= get_field_data_safe(pub_data_stru,
                                    FIELD_PIN,
                                    pub_data_stru->in_msg_type,
                                    tmp,sizeof(tmp))) return 1;
@@ -2997,9 +2997,9 @@ int format_echo_input(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     dcs_debug(fieldVal,fldLen,"<%s> 固定数据显示 ",__FUNCTION__);
                 } else if(tmp[0]=='1') { //金额、需格式化
                     s = get_field_data_safe(pub_data_stru,
-                                            get_pub_field_id(pub_data_stru->in_msg_type,
+                                            get_pub_field_id(pub_data_stru->route_msg_type,
                                                     tmp+1),
-                                            pub_data_stru->in_msg_type, tmp,sizeof(tmp));
+                                            pub_data_stru->route_msg_type, tmp,sizeof(tmp));
                     if(s >0) {
                         tmp[s]=0x00;
                         fieldVal[fldLen] = sprintf(fieldVal + fldLen + 1, "%.2f", atof(tmp)/100.00);
@@ -3011,9 +3011,9 @@ int format_echo_input(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     dcs_debug(fieldVal,fldLen,"<%s> 数据内容 金额 ",__FUNCTION__);
                 } else if(tmp[0]=='2') { //从数据域去数据显示
                     s = get_field_data_safe(pub_data_stru,
-                                            get_pub_field_id(pub_data_stru->in_msg_type,
+                                            get_pub_field_id(pub_data_stru->route_msg_type,
                                                     tmp+1),
-                                            pub_data_stru->in_msg_type,
+                                            pub_data_stru->route_msg_type,
                                             tmp,sizeof(tmp));
                     if(s >0) {
                         tmp[s]=0x00;

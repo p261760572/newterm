@@ -37,8 +37,8 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
 //设置报文头
     memset(data_buf, 0 , sizeof(data_buf));
     func_code[0]=0x00;
-    get_field_data_safe(pub_data_stru,get_pub_field_id(msg_type,"FUNC_CODE"),
-                        msg_type,func_code,sizeof(func_code));
+    _get_field_data_safe(pub_data_stru,get_pub_field_id(msg_type,"FUNC_CODE"),
+                        msg_type,func_code,1,sizeof(func_code));
 //tmp_order[1]，终端需要自动更新菜单标识
     if(pub_data_stru->tmp_order[1]==0x31 &&
        memcmp(pub_data_stru->center_result_code,"00",2) ==0) {

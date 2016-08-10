@@ -784,7 +784,7 @@ int get_route_trans_set(glob_msg_stru * pub_data_stru) {
                           pub_data_stru->route_msg_type, strlen(field_db),field_db,1);
         else
             update_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type,"FUNC_CODE"),
-                             pub_data_stru->route_msg_type, strlen(field_db),field_db,0);
+                             pub_data_stru->route_msg_type, strlen(field_db),field_db,1);
 
     }
     dcs_debug(0,0,"at %s(%s:%d), work_type=%d ,is_check_mac=%d",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_insti_work_type,pub_data_stru->route_is_check_mac);
@@ -1182,10 +1182,10 @@ int GetSpecificBusinessPara(char *in_add_data, char *out_add_data, glob_msg_stru
     rtrim(merch_info);
 //    snprintf(out_add_data, t_out_add_data);
     if(0 < (l = strlen(term_id1))) {
-        add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type, l, term_id1, 1);
+        add_pub_field(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->route_msg_type, l, term_id1, 1);
     }
     if(0 < (l = strlen(term_id2))) {
-        add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->in_msg_type, l, term_id2, 1);
+        add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->route_msg_type, l, term_id2, 1);
     }
     if(0 < (l = strlen(mcc))) {
         add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "MCC"),
@@ -1219,9 +1219,9 @@ int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
     if(para != NULL) rtrim(para);
     if(pub_data_stru->route_num > 0) {
         _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                             pub_data_stru->in_msg_type, in_term_id1, 2,17);
+                             DB_MSG_TYPE, in_term_id1, 2,17);
         _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
-                             pub_data_stru->in_msg_type, in_term_id2, 2,17);
+                             DB_MSG_TYPE, in_term_id2, 2,17);
     } else {
         if(0>=get_field_data_safe(pub_data_stru, FIELD_TERM_ID1, pub_data_stru->in_msg_type,
                                   in_term_id1,sizeof(in_term_id1)))
@@ -1260,6 +1260,8 @@ int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
     if(0 < (l = strlen(term_id2))) {
         add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->route_msg_type, l, term_id2, 1);
     }
+    dcs_debug(0,0,"at %s(%s:%d), id=%d, term_id=[%s],MSG_TYPE=[%s]",__FUNCTION__,__FILE__,__LINE__,FIELD_TERM_ID1,
+    					term_id1,pub_data_stru->route_msg_type);
     /*
     if(0 < (l = strlen(t_out_add_data)))
     {
@@ -2532,8 +2534,9 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
         }
         if(0>(ret = add_pub_field(pub_data_stru, s_fldid, DB_MSG_TYPE, strlen(addData), addData, 2))) {
             dcs_log(0,0,"at %s(%s:%d), add_pub_field [%d] fail!",__FUNCTION__,__FILE__,__LINE__,s_fldid);
-        } else
-            dcs_debug(0,0,"at %s(%s:%d), add_pub_field [%d][%s] !",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData);
+        } 
+        //else
+//            dcs_debug(0,0,"at %s(%s:%d), add_pub_field [%d][%s] !",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData);
     }
     EXEC SQL CLOSE SAVE_ADDIDATA_CUR;
     return 1;

@@ -1447,7 +1447,7 @@ int tpos_query_expenses(glob_msg_stru *pub_data_stru) {
     format_echo_input(tmp, 0, pub_data_stru);
     snprintf(buf,sizeof(buf),"%c%s",flag,deposit_no);
     add_pub_field(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "3D"),
-                  pub_data_stru->route_msg_type,strlen(buf), buf, 1); //设置返回的账单号
+                  pub_data_stru->in_msg_type,strlen(buf), buf, 1); //设置返回的账单号
     strcpy_s(pub_data_stru->center_result_code,"00",sizeof(pub_data_stru->center_result_code));
     return 1;
 }
