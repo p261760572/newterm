@@ -10,136 +10,125 @@
 #include "tools.h"
 #include "db_tools.h"
 
+#include "db.h"
+
 int HexToDec(char *hex);
 
-trans_log_handler_def trans_log_services[] = {
-    {"SYS_DATE"        , NULL, 8 + 1   , 0},
-    {"SYS_TIME"        , NULL, 6 + 1   , 0},
-    {"QS_DATE"         , NULL, 8 + 1   , 0},
-    {"ACQ_INSTI_CODE"  , NULL, 11 + 1   , 0},
-    {"PAY_INSTI_CODE"  , NULL, 11 + 1   , 0},
-    {"APP_INSTI_CODE"  , NULL, 11 + 1   , 0},
-    {"ACQ_MSG_TYPE"    , NULL, 4 + 1   , 0},
-    {"ACQ_TRANS_TYPE"  , NULL, 4 + 1   , 0},
-    {"APP_TYPE"        , NULL, 4 + 1   , 0},
-    {"PAY_MSG_TYPE"    , NULL, 4 + 1   , 0},
-    {"PAY_TRANS_TYPE"  , NULL, 4 + 1   , 0},
-    {"APP_MSG_TYPE"    , NULL, 4 + 1   , 0},
-    {"APP_TRANS_TYPE"  , NULL, 4 + 1   , 0},
-    {"RESP_CD_APP"     , NULL, 6 + 1   , 0},
-    {"RESP_CD_PAY"     , NULL, 6 + 1   , 0},
-    {"RESP_CD_RCV"     , NULL, 6 + 1   , 0},
-    {"PAY_ACCT_NO"     , NULL, 30 + 1  , 0},
-    {"CARD_ATTR"       , NULL, 2 + 1   , 0},
-    {"ISS_INSTI_CODE"  , NULL, 8 + 1   , 0},
-    {"AMOUNT_PAY"      , NULL, 12 + 1  , 0},
-    {"AMOUNT_REAL"     , NULL, 12 + 1  , 0},
-    {"FEE"             , NULL, 12 + 1  , 0},
-    {"ACQ_TRA_NO"      , NULL, 6 + 1   , 0},
-    {"PAY_TRA_NO"      , NULL, 6 + 1   , 0},
-    {"APP_TRA_NO"      , NULL, 6 + 1   , 0},
-    {"ACQ_DATE"        , NULL, 8 + 1   , 0},
-    {"ACQ_TIME"        , NULL, 6 + 1   , 0},
-    {"PAY_DATE"        , NULL, 8 + 1   , 0},
-    {"PAY_TIME"        , NULL, 6 + 1   , 0},
-    {"APP_DATE"        , NULL, 8 + 1   , 0},
-    {"APP_TIME"        , NULL, 6 + 1   , 0},
-    {"ACQ_TERM_ID1"    , NULL, 20 + 1  , 0},
-    {"ACQ_TERM_ID2"    , NULL, 20 + 1  , 0},
-    {"PAY_TERM_ID1"    , NULL, 20 + 1  , 0},
-    {"PAY_TERM_ID2"    , NULL, 20 + 1  , 0},
-    {"APP_TERM_ID1"    , NULL, 20 + 1  , 0},
-    {"APP_TERM_ID2"    , NULL, 20 + 1  , 0},
-    {"ACQ_ADDITION"    , NULL, 512 + 1 , 0},
-    {"PAY_ADDITION"    , NULL, 512 + 1 , 0},
-    {"APP_ADDITION"    , NULL, 512 + 1 , 0},
-    {"SYS_REF_NO"      , NULL, 12 + 1  , 0},
-    {"POS_ENTRY_MD_CD" , NULL, 3 + 1   , 0},
-    {"POS_COND_CD"     , NULL, 2 + 1   , 0},
-    {"RCV_ACCT_NO"     , NULL, 30 + 1  , 0},
-    {"TRANS_CURR_CD"   , NULL, 3 + 1   , 0},
-    {"RESP_CD_AUTH_ID" , NULL, 6 + 1   , 0},
-    {"STEP"            , NULL, 1 + 1   , 0},
-    {"VOID_FLAG"       , NULL, 1 + 1   , 0},
-    {"PERMIT_VOID"     , NULL, 1 + 1   , 0},
-    {"ACQ_CRY_TYPE"    , NULL, 1 + 1   , 0},
-    {"ACQ_MAC"         , NULL, 16 + 1   , 0},
-    {"MCC"         , NULL, 4 + 1   , 0},
-    {"ACQ_PROC_CODE"  , NULL, 6 + 1   , 0},
-    {"PAY_PROC_CODE"  , NULL, 6 + 1   , 0},
-    {"PAY_MSG_ID"  , NULL, 6 + 1   , 0},
 
-    {"MERCH_INFO"  , NULL, 80 + 1   , 0},
-    {NULL              , NULL, 0       , 0}
-};
+//add 2016/8/10 16:58:32
 
-void SetTransLogServices(char *val, int index) {
-    if(trans_log_services[index].Str == NULL) {
-        dcs_log(0, 0, "<FILE:%s,LINE:%d>SetTransLogServices出错，下标越界！", __FILE__, __LINE__);
-        return;
-    }
-    trans_log_services[index].Val = val;
+#define OFFSETOF(type, field) ((size_t)(&((type *)0)->field))
+
+#define SIZEOF(type, field) sizeof(((type *)0)->field)
+
+#define DEFINE_FIELD(type, field, ctype) {                              \
+    #type, #field, OFFSETOF(type, field), SIZEOF(type, field), ctype    \
 }
 
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
+
+
+#define CTYPE_STRING 1
+
+trans_log_handler_def trans_log_services[] = {
+    DEFINE_FIELD(tl_trans_log_def, sys_date , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, sys_time , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, qs_date , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_insti_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_insti_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_insti_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_msg_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_trans_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_msg_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_trans_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_msg_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_trans_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, resp_cd_app , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, resp_cd_pay , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, resp_cd_rcv , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_acct_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, card_attr , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, iss_insti_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, amount_pay , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, amount_real , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, fee , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_tra_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_tra_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_tra_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_date , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_time , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_date , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_time , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_date , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_time , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_term_id1 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_term_id2 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_term_id1 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_term_id2 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_term_id1 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_term_id2 , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_addition , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_addition , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, app_addition , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, sys_ref_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pos_entry_md_cd , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pos_cond_cd , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, rcv_acct_no , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, trans_curr_cd , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, resp_cd_auth_id , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, step , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, void_flag , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, permit_void , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_cry_type , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_mac , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, mcc , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, acq_proc_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_proc_code , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, pay_msg_id , CTYPE_STRING),
+    DEFINE_FIELD(tl_trans_log_def, merch_info , CTYPE_STRING)
+};
+
+
+size_t trans_log_services_size = ARRAY_SIZE(trans_log_services);
+
+tl_trans_log_def *g_translog;
+
+
+trans_log_handler_def *find_field_desc(const char *type, const char *field) {
+    int i;
+    for(i = 0; i < trans_log_services_size; i ++) {
+        if(strcasecmp(trans_log_services[i].type, type) == 0 && strcmp(trans_log_services[i].field, field) == 0) {
+            return &trans_log_services[i];
+        }
+    }
+    return NULL;
+}
+
+char *get_field_string(const char *type, const char *field, void *data) {
+    trans_log_handler_def *desc = find_field_desc(type, field);
+    if(desc != NULL && desc->ctype == CTYPE_STRING) {
+        return ((char *)data) + desc->offset;
+    }
+    return NULL;
+}
+
+int set_field_string(const char *type, const char *field, void *data, char *value) {
+    trans_log_handler_def *desc = find_field_desc(type, field);
+    if(desc != NULL && desc->ctype == CTYPE_STRING) {
+        strcpy_s(((char *)data) + desc->offset, value, desc->size);
+        return 0;
+    }
+    return -1;
+}
+
+
+//add end
+
 void InitTransLogServices(tl_trans_log_def *pTransLog) {
-    int i=0;
-    ICS_DEBUG(0);
-    SetTransLogServices(pTransLog->sys_date         , i++);
-    SetTransLogServices(pTransLog->sys_time         , i++);
-    SetTransLogServices(pTransLog->qs_date          , i++);
-    SetTransLogServices(pTransLog->acq_insti_code   , i++);
-    SetTransLogServices(pTransLog->pay_insti_code   , i++);
-    SetTransLogServices(pTransLog->app_insti_code   , i++);
-    SetTransLogServices(pTransLog->acq_msg_type     , i++);
-    SetTransLogServices(pTransLog->acq_trans_type   , i++);
-    SetTransLogServices(pTransLog->app_type         , i++);
-    SetTransLogServices(pTransLog->pay_msg_type     , i++);
-    SetTransLogServices(pTransLog->pay_trans_type   , i++);
-    SetTransLogServices(pTransLog->app_msg_type     , i++);
-    SetTransLogServices(pTransLog->app_trans_type   , i++);
-    SetTransLogServices(pTransLog->resp_cd_app      , i++);
-    SetTransLogServices(pTransLog->resp_cd_pay      , i++);
-    SetTransLogServices(pTransLog->resp_cd_rcv      , i++);
-    SetTransLogServices(pTransLog->pay_acct_no      , i++);
-    SetTransLogServices(pTransLog->card_attr        , i++);
-    SetTransLogServices(pTransLog->iss_insti_code   , i++);
-    SetTransLogServices(pTransLog->amount_pay       , i++);
-    SetTransLogServices(pTransLog->amount_real      , i++);
-    SetTransLogServices(pTransLog->fee              , i++);
-    SetTransLogServices(pTransLog->acq_tra_no       , i++);
-    SetTransLogServices(pTransLog->pay_tra_no       , i++);
-    SetTransLogServices(pTransLog->app_tra_no       , i++);
-    SetTransLogServices(pTransLog->acq_date         , i++);
-    SetTransLogServices(pTransLog->acq_time         , i++);
-    SetTransLogServices(pTransLog->pay_date         , i++);
-    SetTransLogServices(pTransLog->pay_time         , i++);
-    SetTransLogServices(pTransLog->app_date         , i++);
-    SetTransLogServices(pTransLog->app_time         , i++);
-    SetTransLogServices(pTransLog->acq_term_id1     , i++);
-    SetTransLogServices(pTransLog->acq_term_id2     , i++);
-    SetTransLogServices(pTransLog->pay_term_id1     , i++);
-    SetTransLogServices(pTransLog->pay_term_id2     , i++);
-    SetTransLogServices(pTransLog->app_term_id1     , i++);
-    SetTransLogServices(pTransLog->app_term_id2     , i++);
-    SetTransLogServices(pTransLog->acq_addition     , i++);
-    SetTransLogServices(pTransLog->pay_addition     , i++);
-    SetTransLogServices(pTransLog->app_addition     , i++);
-    SetTransLogServices(pTransLog->sys_ref_no       , i++);
-    SetTransLogServices(pTransLog->pos_entry_md_cd  , i++);
-    SetTransLogServices(pTransLog->pos_cond_cd      , i++);
-    SetTransLogServices(pTransLog->rcv_acct_no      , i++);
-    SetTransLogServices(pTransLog->trans_curr_cd    , i++);
-    SetTransLogServices(pTransLog->resp_cd_auth_id  , i++);
-    SetTransLogServices(pTransLog->step             , i++);
-    SetTransLogServices(pTransLog->void_flag        , i++);
-    SetTransLogServices(pTransLog->permit_void      , i++);
-    SetTransLogServices(pTransLog->acq_cry_type     , i++);
-    SetTransLogServices(pTransLog->acq_mac          , i++);
-    SetTransLogServices(pTransLog->mcc          , i++);
-    SetTransLogServices(pTransLog->acq_proc_code    , i++);
-    SetTransLogServices(pTransLog->pay_proc_code    , i++);
-    SetTransLogServices(pTransLog->pay_msg_id    , i++);
-    SetTransLogServices(pTransLog->merch_info       , i++);
+    //memcpy(&g_translog, pTransLog, sizeof(g_translog));
+    g_translog = pTransLog;
+
 }
 
 //20140731
@@ -312,24 +301,14 @@ int SetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, sho
     short d_field_id;
 
     InitTransLogServices(transLog);
-    for(i = 0; trans_log_services[i].Str != NULL; i++) {
-        if(0 == strcasecmp(fieldName, trans_log_services[i].Str)) {
-            ret = SetFieldData(trans_log_services[i].Val, fieldID, fieldVal, trans_log_services[i].Size, trans_log_services[i].Flag);
-            if(0 > ret) {
-                dcs_log(0, 0, "<FILE:%s,LINE:%d>取%s出错[%s][%s][%s]！", __FILE__, __LINE__, fieldName, fieldID, fieldVal, trans_log_services[i].Val);
-                ICS_DEBUG(0);
-                return -1;
-            } else {
-                if(0 == trans_log_services[i].Flag) {
-                    if(0 < (d_field_id = get_pub_field_id(DB_MSG_TYPE, fieldName))) {
-                        add_pub_field(pub_data_stru, d_field_id, pub_data_stru->route_msg_type,
-                                      strlen(fieldVal), fieldVal, 2);
-                    }
-                }
-                return ret;
-            }
+
+    if(set_field_string("tl_trans_log_def", fieldName, transLog, fieldVal) == 0) {
+        if((d_field_id = get_pub_field_id(DB_MSG_TYPE, fieldName)) > 0) {
+            add_pub_field(pub_data_stru, d_field_id, DB_MSG_TYPE, strlen(fieldVal), fieldVal, 2);
         }
+        return 0;
     }
+
     ICS_DEBUG(0);
     dcs_log(0, 0, "<FILE:%s,LINE:%d>数据字段名[%s]不正确！", __FILE__, __LINE__, fieldName);
     return -1;
@@ -337,18 +316,14 @@ int SetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, sho
 
 int GetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, short fieldID, int size) {
     int ret, i;
+    char *value;
     InitTransLogServices(transLog);
-    for(i = 0; trans_log_services[i].Str != NULL; i++) {
-        if(0 == strcasecmp(fieldName, trans_log_services[i].Str)) {
-            ret = GetFieldData(trans_log_services[i].Val, fieldID, fieldVal, size, trans_log_services[i].Flag);
-            if(0 > ret) {
-                dcs_log(0, 0, "<FILE:%s,LINE:%d>取置%s出错[%s][%d][%s]！", __FILE__, __LINE__, fieldName, fieldID, fieldVal, trans_log_services[i].Val);
-                ICS_DEBUG(0);
-                return -1;
-            } else
-                return ret;
-        }
+    value = get_field_string("tl_trans_log_def", fieldName, transLog);
+    if(value != NULL) {
+        strcpy_s(fieldVal, value, size);
+        return 0;
     }
+
     dcs_log(0, 0, "<FILE:%s,LINE:%d>数据字段名[%s]不正确！", __FILE__, __LINE__, fieldName);
     ICS_DEBUG(0);
     return -1;
@@ -364,41 +339,15 @@ int db_to_pub_daba(glob_msg_stru * pub_data_stru, tl_trans_log_def *pTransLog) {
     AnalyzeAddiData(pub_data_stru, pTransLog->app_addition);
 //  dcs_debug(0,0,"<%s> get_pub_field_id acq",__FUNCTION__);
     AnalyzeAddiData(pub_data_stru, pTransLog->acq_addition);
-    for(i = 0; i < gl_def_set.num; i++) {
-        if(strcmp(gl_def_set.priv_def[i].msg_type, DB_MSG_TYPE) == 0) {
-            for(j = 0; j < gl_def_set.priv_def[i].use_num; j++) {
-                for(k = 0; trans_log_services[k].Str != NULL; k++) {
-                    if(0 == strcasecmp(gl_def_set.priv_def[i].fld_def[j].name, trans_log_services[k].Str)) {
-                        if(trans_log_services[k].Flag == 0) {
-                            rtrim(trans_log_services[k].Val);
-                            if(0>=add_pub_field(pub_data_stru, gl_def_set.priv_def[i].fld_def[j].id, DB_MSG_TYPE,
-                                                strlen(trans_log_services[k].Val), trans_log_services[k].Val, 2))
-                                ;//dcs_debug(0,0,"<%s> add_pub_field name=[%s] fail! ",__FUNCTION__,trans_log_services[k].Str);
-//                          else dcs_debug(0,0,"<%s> name=[%s],value=[%s]",__FUNCTION__,gl_def_set.priv_def[i].fld_def[j].name,trans_log_services[k].Val);
-                            /*//                                if ( strcmp("ACQ_INSTI_CODE",trans_log_services[k].Str)==0)
-                                                            {
-                                                                    char tmp[128];
-                                                                    memset(tmp,0,sizeof(tmp));
-                                                                    _get_field_data(get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), pub_data_stru, tmp, 2);
-                                                                dcs_debug(0,0,"<%s> add_pub_field acq_insti_code=[%s]",__FUNCTION__,tmp);
-                                                            }
 
-                            */
-//                        else dcs_debug(0,0,"<%s> add_pub_filed[%d][%s]",__FUNCTION__,gl_def_set.priv_def[i].fld_def[j].id,trans_log_services[k].Val);
-                        }
+    message_define *db_def = match_priv_stru(DB_MSG_TYPE, &gl_def_set);
 
-                    }
-                }
-            }
+    for(j = 0; j < db_def->use_num; j++) {
+        char *value = get_field_string("tl_trans_log_def", db_def->fld_def[j].name, pTransLog);
+        if(value != NULL) {
+            rtrim(value);
+            add_pub_field(pub_data_stru, db_def->fld_def[j].id, DB_MSG_TYPE, strlen(value), value, 2);
         }
     }
-    /*
-        {
-            char tmp[128];
-            memset(tmp,0,sizeof(tmp));
-            _get_field_data(get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"), pub_data_stru, tmp, 2);
-        dcs_debug(0,0,"<%s> acq_insti_code=[%s]",__FUNCTION__,tmp);
-      }
-    */
     return 1;
 }

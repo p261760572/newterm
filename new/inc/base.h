@@ -312,10 +312,11 @@ typedef struct
 
 typedef struct
 {
-    char *Str;
-    char *Val;
-    int Size;
-    int Flag; //0:表示直接存储，1:特殊存储
+	const char *type;
+	const char *field;
+	size_t offset;
+	size_t size;
+	int ctype;
 }trans_log_handler_def;
 typedef struct{
 	unsigned char fieldLen;
