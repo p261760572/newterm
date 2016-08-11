@@ -186,19 +186,8 @@ int AnalyzeAddiData(glob_msg_stru * pub_data_stru, char *buff) {
 
 
 int HexToDec(char *hex) {
-    int j,sum;
-    sum=0;
-    for(; *hex; hex++) {
-        if(*hex <= 'f' && *hex >= 'a')
-            j=(int)(*hex) - 87;
-        else if(*hex <= 'F' && *hex >= 'A')
-            j=(int)(*hex) - 55;
-        else if(*hex <= '9' && *hex >= '0')
-            j=(int)(*hex) - 48;
-        else
-            j = 0;
-        sum = sum * 16 + j;
-    }
+    int sum = 0;
+	sscanf(hex, "%x", &sum);
     return sum;
 }
 
