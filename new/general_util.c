@@ -12,6 +12,9 @@
 #include "secu.h"
 #include "ibdcs.h"
 
+#define MAX(a, b) ((a)>(b)?(a):(b))
+#define MIN(a, b) ((a)<(b)?(a):(b))
+
 void init_pub_data_stru(glob_msg_stru * pub_data_stru) {
     assert(pub_data_stru);  // 2016/7/20 星期三 下午 4:55:57
     memset(pub_data_stru, 0, sizeof(*pub_data_stru));
@@ -272,16 +275,10 @@ int get_field_data_safe(glob_msg_stru *pub_data_stru,int field_id,
         if(field_id == pub_data_stru->data_rec[i].field_id &&
            memcmp(msg_type, pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off) {
-            if(pub_data_stru->data_rec[i].len >= size) {
-                memcpy(data,pub_data_stru->data_rec[i].data_addr,size-1);
-                data[size-1]=0x00;
-                return (size -1);
-            } else {
-                memcpy(data,pub_data_stru->data_rec[i].data_addr,pub_data_stru->data_rec[i].len);
-                data[pub_data_stru->data_rec[i].len]=0x00;
-                return pub_data_stru->data_rec[i].len;
-            }
-
+							memcpy(data,pub_data_stru->data_rec[i].data_addr, 
+											MIN(pub_data_stru->data_rec[i].len,size-1));
+							data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
+							return MIN(pub_data_stru->data_rec[i].len,size-1);
         }
     }
     return -1;
@@ -296,15 +293,10 @@ int _get_field_data_safe(glob_msg_stru *pub_data_stru,short field_id,
            memcmp(msg_type,pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off &&
            pub_data_stru->data_rec[i].from== flag) {
-            if(size >pub_data_stru->data_rec[i].len) {
-                memcpy(data,pub_data_stru->data_rec[i].data_addr,pub_data_stru->data_rec[i].len);
-                data[pub_data_stru->data_rec[i].len]=0x00;
-                return pub_data_stru->data_rec[i].len;
-            } else {
-                memcpy(data,pub_data_stru->data_rec[i].data_addr,size-1);
-                data[size -1]=0x00;
-                return size -1;
-            }
+                memcpy(data,pub_data_stru->data_rec[i].data_addr,
+                				MIN(pub_data_stru->data_rec[i].len,size-1));
+                data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
+                return MIN(pub_data_stru->data_rec[i].len,size-1);
         }
     }
     return -1;
@@ -418,14 +410,9 @@ char *my_split(char *s1, const char s2,char *s3, int size_s3) {
         if(*p == s2) break;
         p++;
     }
-
-    if((p-s1)< size_s3) {
-        memcpy(s3,s1,p-s1);
-        s3[p-s1]=0x00;
-    } else {
-        memcpy(s3,s1,size_s3-1);
-        s3[size_s3-1]=0x00;
-    }
+		
+		memcpy(s3,s1,MIN(p-s1, size_s3-1));
+    s3[MIN(p-s1, size_s3-1)]=0x00;
     if(*p)
         return (p+1);
     else return p;
@@ -461,14 +448,13 @@ int pack_key(char *keyBuf, int keySize, char *keySet,
                     __FUNCTION__,offset, n, keySize);
             return -1;
         }
-        if(d) { // d为真时,代表数据域分隔符
-            if(0 < n) {
-                rtrim(tmp);
-                offset +=snprintf(keyBuf + offset,keySize-offset,"%s", tmp);
-            }
-            keyBuf[offset++] = d;
-        } else
+        if(0 < n) {
+            rtrim(tmp);
             offset +=snprintf(keyBuf + offset,keySize-offset,"%s", tmp);
+        }
+        if(d) { // d为真时,代表数据域分隔符
+            keyBuf[offset++] = d;
+        } 
     }
     if(d) {
         offset--;
@@ -738,7 +724,6 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
         fieldVal[2] = '1';
     } else
         fieldVal[2] = '2';
-    fieldVal[3]=0x00;
     dcs_debug(0,0,"<%s> end  fieldVal=[%s]",__FUNCTION__,fieldVal);
     return add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type, 3,
                          fieldVal, 1);
@@ -985,7 +970,6 @@ int get_db_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         dcs_log(0, 0, "<%s>从公共数据区中未取到数据 类型[%s]字段[%s]", __FUNCTION__, DB_MSG_TYPE, p);
         return 0;
     }
-    fieldVal[fieldLen]=0x00;
     p = my_split(p, ',',tmp, sizeof(tmp));
     if(p != NULL) {
         if(tmp[0] == '1') {
