@@ -7,11 +7,10 @@ char *strcpy_s(char *dest, const char *src, size_t n) {
         return dest;
     }
 
-    if(n == 0) { //error
-    } else if(src == NULL) {
-        dest[0] = '\0';
-    } else {
-        strncpy(dest,src,n-1);
+	dest[0] = '\0';
+
+	if(src != NULL && n > 0) {
+        strncpy(dest,src,n);
         dest[n-1] = '\0';
     }
 
