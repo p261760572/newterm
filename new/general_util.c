@@ -1286,7 +1286,8 @@ int write_voidtrans_to_fold(timeout_stru *table) {
     }
     return 1;
 }
-int iso_cbc_str(char *para, char *macBuf, int *mac_len, char * field_name, const message_define *p_def, const char *buf, glob_msg_stru *pub_data_stru, int len_type) {
+int iso_cbc_str(char *para, char *macBuf, int *mac_len, char * field_name, const message_define *p_def, 
+								const char *buf, glob_msg_stru *pub_data_stru, int len_type) {
     int i, len, len_len, l, j,f;
     char tmp[4], *p, t_buf[512 + 1],str[256];
     ICS_DEBUG(0);
@@ -1431,7 +1432,8 @@ int CalcFee(char *caFeeType, char *caFee, int amount, char *caKee) {
     return 1;
 }
 
-void print_field_data(glob_msg_stru *pub_data_stru, char *fileName, int fileline, int d, int fieldid, char *fieldName, char *msg_type) {
+void print_field_data(glob_msg_stru *pub_data_stru, char *fileName, int fileline, 
+											int d, int fieldid, char *fieldName, char *msg_type) {
     char tmpbuf[1024];
     int len;
     if(fieldName != NULL && msg_type != NULL &&
