@@ -78,7 +78,7 @@ int get_para_ver(char *menu_ver, char *para_ver);
 int get_next_part_para( char *ver,int step,struct TPOS_PARA_INFO * para);
 int get_ic_para(glob_msg_stru *pub_data_stru,struct TPOS_TERM_INFO *terminfo);
 int update_auto_download_flag( char *psam);
-int db_init_stack(char *node_set,int *stack);
+int db_init_stack(char *node_set,int *stack, size_t stack_size);
 int db_push(int *stack,int id,int *use);
 int db_pop(int *stack , int *id,int *use);
 int get_menu_node( char * menu_ver , int node_id , struct TPOS_MENU_NODE * menu_node);
