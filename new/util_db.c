@@ -187,22 +187,26 @@ int AnalyzeAddiData(glob_msg_stru * pub_data_stru, char *buff) {
 
 int HexToDec(char *hex) {
     int sum = 0;
-	sscanf(hex, "%x", &sum);
+	sscanf(hex, "%X", &sum);
     return sum;
 }
 
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
+#define FLS 3
+#define FDLS 3
 
 //查找Field
 //field_len输出域长度
 //成功返回下标，失败返回-1
 int FindFieldData(char *buff, int field_id, int *field_len) {
     int i, len, data_len;
-    char tmp_buf[3+1], tmp_field[3 + 1], field[3 + 1];
-    sprintf(field, "%03x", field_id);
+    char tmp_buf[FDLS+1], tmp_field[FLS + 1], field[FLS + 1];
+    sprintf(field, "%0" STRING(FLS) "X", field_id);
 	len = strlen(buff);
-	for(i = 0; i + 6 < len; i += (6+data_len)) {
+	for(i = 0; i + FLS + FDLS < len; i += (FLS + FDLS + data_len)) {
 		strcpy_s(tmp_field, buff+i, sizeof(tmp_field));
-		strcpy_s(tmp_buf, buff+i+3, sizeof(tmp_buf));
+		strcpy_s(tmp_buf, buff+i+FLS, sizeof(tmp_buf));
 		data_len = atoi(tmp_buf);
 		if(strcmp(field, tmp_field) == 0) {
 			if(field_len != NULL) {
@@ -229,7 +233,7 @@ int GetFieldData(char *buff, int field_id, char *field_buf, int size, int flag) 
 	} else if(field_len >= size){
 		//error
 	} else {
-		memcpy(field_buf, buff+i+6, field_len);
+		memcpy(field_buf, buff+i+FLS+FDLS, field_len);
 		field_buf[field_len] = '\0';
 		return field_len;
 	}
@@ -244,7 +248,7 @@ int DelFieldData(char *buff, int field_id) {
 		//error
 	} else {
 		len = strlen(buff);
-		memmove(buff +  i, buff + i + 6 + field_len, len - i - 6 - field_len + 1); //多复制1个'\0'
+		memmove(buff +  i, buff + i + FLS + FDLS + field_len, len - i - FLS + FDLS - field_len + 1); //多复制1个'\0'
 	}
 		
     return -1;
@@ -253,7 +257,7 @@ int DelFieldData(char *buff, int field_id) {
 
 int SetFieldData(char *buff, int field_id, char *field_data, int size, int flag) {
 	int len, data_len;
-	char tmp_buf[10];
+	char tmp_buf[20];
     if(flag == 0) {
         strcpy_s(buff, field_data, size);
         return 1;
@@ -264,16 +268,16 @@ int SetFieldData(char *buff, int field_id, char *field_data, int size, int flag)
 	len = strlen(buff);
 	data_len = strlen(field_data);
 	
-	if(len + 6 + data_len >= size) {
+	if(len + FLS + FDLS + data_len >= size) {
 		//error
 		return -1;
 	} else if(field_id > 0xfff || data_len > 999) {
 		//error
 		return -1;
 	} else {
-		snprintf(tmp_buf, sizeof(tmp_buf), "%03X%03d", field_id, data_len);
-		memcpy(buff + len, tmp_buf, 6);
-		strcpy(buff + len + 6, field_data);
+		snprintf(tmp_buf, sizeof(tmp_buf),  "%0" STRING(FLS) "X%0" STRING(FDLS) "d", field_id, data_len);
+		memcpy(buff + len, tmp_buf, FLS + FDLS);
+		strcpy(buff + len + FLS + FDLS, field_data);
 	}
 	
     return 1;
