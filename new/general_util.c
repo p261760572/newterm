@@ -275,10 +275,10 @@ int get_field_data_safe(glob_msg_stru *pub_data_stru,int field_id,
         if(field_id == pub_data_stru->data_rec[i].field_id &&
            memcmp(msg_type, pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off) {
-							memcpy(data,pub_data_stru->data_rec[i].data_addr, 
-											MIN(pub_data_stru->data_rec[i].len,size-1));
-							data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
-							return MIN(pub_data_stru->data_rec[i].len,size-1);
+            memcpy(data,pub_data_stru->data_rec[i].data_addr,
+                   MIN(pub_data_stru->data_rec[i].len,size-1));
+            data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
+            return MIN(pub_data_stru->data_rec[i].len,size-1);
         }
     }
     return -1;
@@ -293,10 +293,10 @@ int _get_field_data_safe(glob_msg_stru *pub_data_stru,short field_id,
            memcmp(msg_type,pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off &&
            pub_data_stru->data_rec[i].from== flag) {
-                memcpy(data,pub_data_stru->data_rec[i].data_addr,
-                				MIN(pub_data_stru->data_rec[i].len,size-1));
-                data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
-                return MIN(pub_data_stru->data_rec[i].len,size-1);
+            memcpy(data,pub_data_stru->data_rec[i].data_addr,
+                   MIN(pub_data_stru->data_rec[i].len,size-1));
+            data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
+            return MIN(pub_data_stru->data_rec[i].len,size-1);
         }
     }
     return -1;
@@ -410,8 +410,8 @@ char *my_split(char *s1, const char s2,char *s3, int size_s3) {
         if(*p == s2) break;
         p++;
     }
-		
-		memcpy(s3,s1,MIN(p-s1, size_s3-1));
+
+    memcpy(s3,s1,MIN(p-s1, size_s3-1));
     s3[MIN(p-s1, size_s3-1)]=0x00;
     if(*p)
         return (p+1);
@@ -454,7 +454,7 @@ int pack_key(char *keyBuf, int keySize, char *keySet,
         }
         if(d) { // d为真时,代表数据域分隔符
             keyBuf[offset++] = d;
-        } 
+        }
     }
     if(d) {
         offset--;
@@ -701,7 +701,7 @@ int get_systime(char *para, short fldid, glob_msg_stru *pub_data_stru) {
 int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char fieldVal[3 + 1], tmpBuf[3];
     memset(fieldVal, 0, sizeof(fieldVal));
-		if(!para || !para[0]) strcpy(para, "04");
+    if(!para || !para[0]) strcpy(para, "04");
     if(0 <= get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,para),
                                 pub_data_stru->in_msg_type, tmpBuf,2)) {
         dcs_debug(tmpBuf,2,"<%s> FIELD_IC_DATA 2 ",__FUNCTION__);
@@ -1286,8 +1286,8 @@ int write_voidtrans_to_fold(timeout_stru *table) {
     }
     return 1;
 }
-int iso_cbc_str(char *para, char *macBuf, int *mac_len, char * field_name, const message_define *p_def, 
-								const char *buf, glob_msg_stru *pub_data_stru, int len_type) {
+int iso_cbc_str(char *para, char *macBuf, int *mac_len, char * field_name, const message_define *p_def,
+                const char *buf, glob_msg_stru *pub_data_stru, int len_type) {
     int i, len, len_len, l, j,f;
     char tmp[4], *p, t_buf[512 + 1],str[256];
     ICS_DEBUG(0);
@@ -1432,8 +1432,8 @@ int CalcFee(char *caFeeType, char *caFee, int amount, char *caKee) {
     return 1;
 }
 
-void print_field_data(glob_msg_stru *pub_data_stru, char *fileName, int fileline, 
-											int d, int fieldid, char *fieldName, char *msg_type) {
+void print_field_data(glob_msg_stru *pub_data_stru, char *fileName, int fileline,
+                      int d, int fieldid, char *fieldName, char *msg_type) {
     char tmpbuf[1024];
     int len;
     if(fieldName != NULL && msg_type != NULL &&
@@ -1844,7 +1844,7 @@ int card_info_check(char *para, short flag, glob_msg_stru *pub_data_stru) {
     }
     if(0 <(l= get_field_data_safe(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))) {
         tmpBuf[l]=0x00;
-        if(0 > GetBank(tmpBuf, bankCode, cardType))
+        if(0 > GetBank(tmpBuf, bankCode, sizeof(bankCode), cardType, sizeof(cardType)))
             return -1;
         add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "CARD_ATTR"),
                       DB_MSG_TYPE, strlen(cardType), cardType, 2);
@@ -2555,7 +2555,8 @@ int sign_request(glob_msg_stru * pub_data_stru) {
     memset(key_data1, 0, sizeof(key_data1));
     memset(key_data2, 0, sizeof(key_data2));
     memset(check_value, 0, sizeof(check_value));
-    if(0 > get_key_info(pub_data_stru->insti_code, mac_tek_indx, mac_tm_key, pin_tek_indx, pin_tm_key))
+    if(0 > get_key_info(pub_data_stru->insti_code, mac_tek_indx, sizeof(mac_tek_indx), mac_tm_key, sizeof(mac_tm_key),
+                        pin_tek_indx, sizeof(pin_tek_indx), pin_tm_key, sizeof(pin_tm_key)))
         return -1;
     if(0 > DESTMKGETPIKMAK2(return_code, pub_data_stru->in_mac_index, mac_tek_indx, mac_tm_key, key_data1, key_data2, check_value, "Y", "Y")) {
         strcpy(pub_data_stru->center_result_code, CODE_SAFE_ERR);

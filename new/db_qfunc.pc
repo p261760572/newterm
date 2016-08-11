@@ -2048,7 +2048,7 @@ int GetBank(char *cardNo, char *bankCode, size_t bank_code_size, char *cardType,
         return -1;
     }
     strcpy_s(bankCode, bankcode, bank_code_size);
-    strcpy(cardType, cardtype, card_type_size);
+    strcpy_s(cardType, cardtype, card_type_size);
     return 1;
 }
 
