@@ -5,16 +5,17 @@
 #include "var.h"
 #include "general_util.h"
 #include "ibdcs.h"
-#include  "tmcibtms.h"
+#include "tmcibtms.h"
 #include "db_qfunc.h"
 #include "db_tools.h"
+#include "db.h"
 
 int request_msg_proc(glob_msg_stru *pub_data_stru) {
     int i;
     ICS_DEBUG(0);
     i=confirm_app_type(pub_data_stru);
     if(0>i) { //确定业务类型
-        dcs_log(0,0,"<%s>can not confirm app type!",__FUNCTION__);
+        dcs_log(0,0,"at %s(%s:%d) can not confirm app type!",__FUNCTION__,__FILE__,__LINE__);
         return -1;
     }
     if(!pub_data_stru->open_flag) { //业务被关闭
@@ -37,18 +38,18 @@ int request_msg_proc(glob_msg_stru *pub_data_stru) {
             return 1;
         } else return -1;
     }
-    dcs_debug(0,0," 需转接交易处理");
+    dcs_debug(0,0,"at %s(%s:%d)  需转接交易处理",__FUNCTION__,__FILE__,__LINE__);
 
     i=check_app_limit(pub_data_stru);
     if(0>i) { //检查业务限制,违反业务规则情况或系统异常情况
         pub_data_stru->switch_src_flag=1;
-        dcs_debug(0,0,"检查业务限制,违反业务规则情况或系统异常情况 i<0");
+        dcs_debug(0,0,"at %s(%s:%d) 检查业务限制,违反业务规则情况或系统异常情况 i<0",__FUNCTION__,__FILE__,__LINE__);
         if(0>err_set_msg(pub_data_stru)) return -1;
         return 1;
     } else if(i==0) { //检查业务,需继续与发起方交互信息情况，主要用于对终端多次智能交互情况的应用
         pub_data_stru->switch_src_flag=1;
         if(pub_data_stru->in_cry_flag) pub_data_stru->out_cry_flag =1;
-        dcs_debug(0,0,"检查业务,需继续与发起方交互信息情况，主要用于对终端多次智能交互情况的应用 i=0");
+        dcs_debug(0,0,"at %s(%s:%d) 检查业务,需继续与发起方交互信息情况，主要用于对终端多次智能交互情况的应用 i=0",__FUNCTION__,__FILE__,__LINE__);
         if(0 > conver_data(pub_data_stru, 2)) return -1;
         i=db_insert(pub_data_stru,1);
         if(0==i) {
@@ -64,7 +65,7 @@ int request_msg_proc(glob_msg_stru *pub_data_stru) {
     if(0>get_route_insti_code(pub_data_stru)) { //获取路由机构 ,在此函数内检查机构是否被关闭，机构通信链路是否就绪，主要是考虑到主机构有问题走备份机构
         pub_data_stru->switch_src_flag=1;
         if(pub_data_stru->in_cry_flag) pub_data_stru->out_cry_flag =1;
-        dcs_debug(0,0,"获取路由机构 ,在此函数内检查机构是否被关闭，机构通信链路是否就绪，主要是考虑到主机构有问题走备份机构");
+        dcs_debug(0,0,"at %s(%s:%d) 获取路由机构 ,在此函数内检查机构是否被关闭，机构通信链路是否就绪，主要是考虑到主机构有问题走备份机构",__FUNCTION__,__FILE__,__LINE__);
         if(0>err_set_msg(pub_data_stru)) return -1;
 
         return 1;
@@ -73,12 +74,12 @@ int request_msg_proc(glob_msg_stru *pub_data_stru) {
     if(0>get_route_trans_info(pub_data_stru)) { //获取路由交易信息,包括报文类型等
         pub_data_stru->switch_src_flag=1;
         if(pub_data_stru->in_cry_flag) pub_data_stru->out_cry_flag =1;
-        dcs_debug(0,0,"获取路由交易信息,包括报文类型等 ");
+        dcs_debug(0,0,"at %s(%s:%d) 获取路由交易信息,包括报文类型等 ",__FUNCTION__,__FILE__,__LINE__);
         if(0>err_set_msg(pub_data_stru)) return -1;
         return 1;
     }
     if(0>conver_data(pub_data_stru, 0)) { //数据格式转换
-        dcs_debug(0,0,"<%s>conver_data fail! ",__FUNCTION__);
+        dcs_debug(0,0,"at %s(%s:%d) conver_data fail! ",__FUNCTION__,__FILE__,__LINE__);
         pub_data_stru->switch_src_flag=1;
         if(0>err_set_msg(pub_data_stru)) return -1;
         return 1;
@@ -93,7 +94,7 @@ int direct_respose(glob_msg_stru *pub_data_stru) {
     ICS_DEBUG(0);
 
     if(0>check_direct_limit(pub_data_stru)) { //检查直接应答业务处理限制
-        dcs_log(0,0,"<%s>check_direct_limit not pass",__FUNCTION__);
+        dcs_log(0,0,"at %s(%s:%d) check_direct_limit not pass",__FUNCTION__,__FILE__,__LINE__);
         if(0>err_set_msg(pub_data_stru)) return -1;
         return 1;
     }
@@ -104,19 +105,19 @@ int direct_respose(glob_msg_stru *pub_data_stru) {
         return -1;
     pub_data_stru->switch_src_flag=1;
     pub_data_stru->out_cry_flag = pub_data_stru->in_cry_flag;
-    snprintf(pub_data_stru->route_insti_code,9,"%s",pub_data_stru->insti_code);
-    snprintf(pub_data_stru->route_trans_type,5,"%s",pub_data_stru->in_trans_type);
-    snprintf(pub_data_stru->route_msg_type,5,"%s",pub_data_stru->in_msg_type);
-    snprintf(pub_data_stru->route_fold_name,40,"%s",pub_data_stru->insti_fold_name);
-    snprintf(pub_data_stru->route_mac_index ,6 ,"%s",pub_data_stru->in_mac_index);
-    snprintf(pub_data_stru->route_mac_key   ,33 ,"%s",pub_data_stru->in_mac_key);
+    strcpy_s(pub_data_stru->route_insti_code, pub_data_stru->insti_code, sizeof(pub_data_stru->route_insti_code));
+    strcpy_s(pub_data_stru->route_trans_type, pub_data_stru->in_trans_type, sizeof(pub_data_stru->route_trans_type));
+    strcpy_s(pub_data_stru->route_msg_type, pub_data_stru->in_msg_type, sizeof(pub_data_stru->route_msg_type));
+    strcpy_s(pub_data_stru->route_fold_name, pub_data_stru->insti_fold_name, sizeof(pub_data_stru->route_fold_name));
+    strcpy_s(pub_data_stru->route_mac_index, pub_data_stru->in_mac_index, sizeof(pub_data_stru->route_mac_index));
+    strcpy_s(pub_data_stru->route_mac_key, pub_data_stru->in_mac_key, sizeof(pub_data_stru->route_mac_key));
 
     for(i=0; gl_direct_proc[i].func!=NULL; i++) {
         if(strcmp(gl_direct_proc[i].name,direct_name)==0)
             return gl_direct_proc[i].func(pub_data_stru);
     }
-    dcs_log(0,0, "<%s>can not found direct proc msg_type=[%s],app_type=[%s],direct_name=[%s]",
-            __FUNCTION__,pub_data_stru->in_msg_type,pub_data_stru->app_type,
+    dcs_log(0,0, "at %s(%s:%d) can not found direct proc msg_type=[%s],app_type=[%s],direct_name=[%s]",__FUNCTION__,__FILE__,__LINE__,
+            pub_data_stru->in_msg_type,pub_data_stru->app_type,
             direct_name);
     return -1;
 }
