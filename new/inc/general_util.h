@@ -196,21 +196,23 @@ int get_tpos_info(char *psam,struct TPOS_TERM_INFO *terminfo);
 int tpos_reset_download(char *psam, char flag);
 int get_ic_data(char *buf, int bSize, char *node_set, int *cnt);
 int select_translog(tl_trans_log_def *pTransLog);
-int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head,char *advert_inf,char *advert_tail);
+int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head, size_t head_size,
+                   char *advert_inf, size_t inf_size, char *advert_tail, size_t tail_size);
 int get_aid_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt);
 int db_save_set_ic( char *node_set,int step,char *psam, int flag);
 int get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para_step, int *cnt);
 int get_term_discount_info(DISCNT_INFO *discnt_info);
 int  fold_locate_folder(const char *folder_name);
 int confirm_trans_type(glob_msg_stru * pub_data_stru);
-int GetBank(char *cardNo, char *bankCode, char *cardType);
+int GetBank(char *cardNo, char *bankCode, size_t bank_code_size, char *cardType, size_t card_type_size);
 int get_term_trans_control(char *creditflag, int *credit_card, int *credit_d_a, int *credit_d_c, 
 														int *debit_card, int *debit_d_a, int *debit_d_c, glob_msg_stru *pub_data_stru);
 int AddUpTrans(char *cardno, int *amount, int *count, char *app_type, int flag);
 int db_to_pub_daba(glob_msg_stru * pub_data_stru, tl_trans_log_def *pTransLog);
 int insert_timeout_table(glob_msg_stru *pub_data_stru, int flag);
 int update_db_result_pay(tl_trans_log_def *log,char *ret_code);
-int get_key_info(char *insti_code, char *mac_tek_index, char *mac_tmk_key, char *pin_tek_index, char *pin_tmk_key);
+int get_key_info(char *insti_code, char *mac_tek_index, size_t mac_tek_index_size, char *mac_tmk_key, size_t mac_tmk_key_size,
+                 char *pin_tek_index, size_t pin_tek_index_size, char *pin_tmk_key, size_t pin_tmk_key_size);
 int GetSpecificBusinessPara(char *in_add_data, char *out_add_data, glob_msg_stru * pub_data_stru);
 int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para);
 int check_card_limit(char *card_no,char *iss_insti, char *flag);

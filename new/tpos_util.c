@@ -10,6 +10,7 @@
 #include "db_tools.h"
 #include "assert.h"
 #include "ibdcs.h"
+
 int tpos_check_mac(glob_msg_stru * pub_data_stru) {
     int len,n,i,l;
     char tmp[1024],mac[17],return_code[3];
@@ -1059,7 +1060,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
     } else { //菜单全部更新处理
         cnt=0;
         dcs_debug(0,0,"<%s> db_init_stack begin!",__FUNCTION__);
-        use=db_init_stack(terminfo.stack_detail,stack);
+        use=db_init_stack(terminfo.stack_detail,stack,sizeof(stack));
         if(use <0) {
             dcs_log(0,0,"<%s> db_init_stack fail!",__FUNCTION__);
             strcpy(pub_data_stru->center_result_code,"96");
@@ -1410,7 +1411,7 @@ int db_pop(int *stack , int *id,int *use) {
     return 1;
 }
 
-int db_init_stack(char *node_set,int *stack) {
+int db_init_stack(char *node_set,int *stack, size_t stack_size) {
     char *p,tmp[64];
     int n;
     n=0;
@@ -1421,7 +1422,7 @@ int db_init_stack(char *node_set,int *stack) {
 
         stack[n]=atoi(tmp);
         n++;
-        if(n==30) return -1;
+        if(n==stack_size) return -1;
         p=my_split(p,',',tmp,sizeof(tmp));
     }
     return n;

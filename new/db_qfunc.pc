@@ -761,10 +761,10 @@ int get_route_trans_set(glob_msg_stru * pub_data_stru) {
             if(pub_data_stru->route_set.field.field_id[j] == field_id &&
                strcmp(pub_data_stru->route_set.field.field_name[j],tmp)==0) {
                 //pub_data_stru->route_set.field.from[j] = 0;
-                n = _get_field_data_safe(pub_data_stru,field_id, pub_data_stru->in_msg_type, 
-			                      	tmp, 0,sizeof(tmp));
-			                      	
-				add_pub_field(pub_data_stru,field_id,pub_data_stru->route_msg_type,n,tmp, 1);
+                n = _get_field_data_safe(pub_data_stru,field_id, pub_data_stru->in_msg_type,
+                                         tmp, 0,sizeof(tmp));
+
+                add_pub_field(pub_data_stru,field_id,pub_data_stru->route_msg_type,n,tmp, 1);
                 break;
             }
         }
@@ -1261,7 +1261,7 @@ int GetGeneralBusinessPara(glob_msg_stru * pub_data_stru,char *para) {
         add_pub_field(pub_data_stru, FIELD_TERM_ID2, pub_data_stru->route_msg_type, l, term_id2, 1);
     }
     dcs_debug(0,0,"at %s(%s:%d), id=%d, term_id=[%s],MSG_TYPE=[%s]",__FUNCTION__,__FILE__,__LINE__,FIELD_TERM_ID1,
-    					term_id1,pub_data_stru->route_msg_type);
+              term_id1,pub_data_stru->route_msg_type);
     /*
     if(0 < (l = strlen(t_out_add_data)))
     {
@@ -1907,7 +1907,8 @@ int FindPubKey(int page, char *buffer) {
     return len;
 }
 
-int get_key_info(char *insti_code, char *mac_tek_index, char *mac_tmk_key, char *pin_tek_index, char *pin_tmk_key) {
+int get_key_info(char *insti_code, char *mac_tek_index, size_t mac_tek_index_size, char *mac_tmk_key, size_t mac_tmk_key_size,
+                 char *pin_tek_index, size_t pin_tek_index_size, char *pin_tmk_key, size_t pin_tmk_key_size) {
     char m_t_i[5 + 1], m_t[32 + 1], p_t_i[5 + 1], p_t[32 + 1];
     ICS_DEBUG(0);
 
@@ -1919,10 +1920,10 @@ int get_key_info(char *insti_code, char *mac_tek_index, char *mac_tmk_key, char 
         dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d,  SELECT INSTI_INFO INSTI_CODE=[%s]!",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, insti_code);
         return -1;
     }
-    snprintf(mac_tek_index,6,"%s", m_t_i);
-    snprintf(pin_tek_index,6,"%s", p_t_i);
-    snprintf(mac_tmk_key,33,"%s", m_t);
-    snprintf(pin_tmk_key,33,"%s", p_t);
+    strcpy_s(mac_tek_index, m_t_i, mac_tek_index_size);
+    strcpy_s(pin_tek_index, p_t_i, pin_tek_index_size);
+    strcpy_s(mac_tmk_key, m_t, mac_tmk_key_size);
+    strcpy_s(pin_tmk_key, p_t, pin_tmk_key_size);
     return 1;
 }
 
@@ -2023,7 +2024,7 @@ int AddUpTrans(char *cardno, int *amount, int *count, char *app_type, int flag) 
     return 1;
 }
 
-int GetBank(char *cardNo, char *bankCode, char *cardType) {
+int GetBank(char *cardNo, char *bankCode, size_t bank_code_size, char *cardType, size_t card_type_size) {
     char cardtype[1 + 1];
     char bankcode[8 + 1];
 
@@ -2046,8 +2047,8 @@ int GetBank(char *cardNo, char *bankCode, char *cardType) {
         dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT CARDBIN Error.cardNo[%s]",__FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode, cardNo);
         return -1;
     }
-    strcpy(bankCode, bankcode);
-    strcpy(cardType, cardtype);
+    strcpy_s(bankCode, bankcode, bank_code_size);
+    strcpy(cardType, cardtype, card_type_size);
     return 1;
 }
 
@@ -2534,7 +2535,7 @@ int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据
         }
         if(0>(ret = add_pub_field(pub_data_stru, s_fldid, DB_MSG_TYPE, strlen(addData), addData, 2))) {
             dcs_log(0,0,"at %s(%s:%d), add_pub_field [%d] fail!",__FUNCTION__,__FILE__,__LINE__,s_fldid);
-        } 
+        }
         //else
 //            dcs_debug(0,0,"at %s(%s:%d), add_pub_field [%d][%s] !",__FUNCTION__,__FILE__,__LINE__,s_fldid,addData);
     }
@@ -2577,7 +2578,7 @@ int trans_end_notify(glob_msg_stru *pub_data_stru) { //交易结束后的通知业务处理
 
 }
 
-int msgtype_convert(char *src_type, char * dest_type) {
+int msgtype_convert(char *src_type, char * dest_type, size_t dest_type_size) {
     char type[10],buf[5];
 
     strcpy_s(buf,src_type,sizeof(buf));
@@ -2588,7 +2589,7 @@ int msgtype_convert(char *src_type, char * dest_type) {
         return 0;
     }
     rtrim(type);
-    snprintf(dest_type,5,"%s",type);
+    strcpy_s(dest_type, type, dest_type_size);
     return 1;
 }
 
@@ -2822,7 +2823,8 @@ int verify_passwd(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     return 1;
 }
 
-int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head,char *advert_inf,char *advert_tail) {
+int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head, size_t head_size,
+                   char *advert_inf, size_t inf_size, char *advert_tail, size_t tail_size) {
     char tmp1[200 + 1];
     char tmp2[200 + 1];
     char tmp3[200 + 1];
@@ -2865,9 +2867,9 @@ int get_advert_inf(glob_msg_stru *pub_data_stru,char *term_id,char *advert_head,
                 }
             }
         }
-    snprintf(advert_head,200,"%s",tmp1);
-    snprintf(advert_inf,200,"%s",tmp2);
-    snprintf(advert_tail,200,"%s",tmp3);
+    strcpy_s(advert_head, tmp1, head_size);
+    strcpy_s(advert_inf, tmp2, inf_size);
+    strcpy_s(advert_tail, tmp3, tail_size);
     return 1;
 }
 int is_valid_cardbin(char *para, short fldid, glob_msg_stru *pub_data_stru) {
