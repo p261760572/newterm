@@ -192,101 +192,94 @@ int HexToDec(char *hex) {
 }
 
 
-
-int GetFieldData(char *buff, int iFieldID, char *fieldBuf, int size, int flag) {
-    int dLen, lLen, fieldLen;
-    char tmpBuf[4], *p, tFieldID[3 + 1], fieldID[3 + 1];
-    size--;
-    if(flag == 0) {
-        strcpy_safe(fieldBuf, buff, size);
-        rtrim(fieldBuf);
-        return strlen(fieldBuf);
-    }
-    lLen = 3;
-    sprintf(fieldID, "%03X", iFieldID);
-    dLen = strlen(buff);
-    for(p = buff; p - buff < dLen - lLen - 3 - 1;) {
-        memcpy(tFieldID, p, 3);
-        p += 3;
-        tFieldID[3] = 0;
-        memcpy(tmpBuf, p, lLen);
-        p += lLen;
-        tmpBuf[lLen] = 0;
-        fieldLen = atoi(tmpBuf);
-        if(p - buff > dLen - fieldLen) return -1;
-        if(0 == memcmp(fieldID, tFieldID, 3)) {
-            if(fieldLen > size) return -1;
-            memcpy(fieldBuf, p, fieldLen);
-            return fieldLen;
-        }
-        p += fieldLen;
-    }
-    return 0;
+//查找Field
+//field_len输出域长度
+//成功返回下标，失败返回-1
+int FindFieldData(char *buff, int field_id, int *field_len) {
+    int i, len, data_len;
+    char tmp_buf[3+1], tmp_field[3 + 1], field[3 + 1];
+    sprintf(field, "%03x", field_id);
+	len = strlen(buff);
+	for(i = 0; i + 6 < len; i += (6+data_len)) {
+		strcpy_s(tmp_field, buff+i, sizeof(tmp_field));
+		strcpy_s(tmp_buf, buff+i+3, sizeof(tmp_buf));
+		data_len = atoi(tmp_buf);
+		if(strcmp(field, tmp_field) == 0) {
+			if(field_len != NULL) {
+				*field_len = data_len;
+			}
+			return i;
+		}
+	}
+	
+    return -1;
 }
 
 
-int SetFieldData(char *buff, int iFieldID, char *fieldBuf, int size, int flag) {
-    int dLen, lLen, fieldLen;
-    char tmpBuf[10], *p, outBuff[1024], *pOut, tFieldID[3 + 1], fieldID[3 + 1];
-    size--;
+int GetFieldData(char *buff, int field_id, char *field_buf, int size, int flag) {
+    int i, field_len;
     if(flag == 0) {
-        strcpy_safe(buff, fieldBuf, size);
+        strcpy_s(field_buf, buff, size);
+        rtrim(field_buf);
+        return strlen(field_buf);
+    }
+	i = FindFieldData(buff, field_id, &field_len);
+	if(i < 0) {
+		//error
+	} else if(field_len >= size){
+		//error
+	} else {
+		memcpy(field_buf, buff+i+6, field_len);
+		field_buf[field_len] = '\0';
+		return field_len;
+	}
+		
+    return -1;
+}
+
+int DelFieldData(char *buff, int field_id) {
+    int i, len, field_len;
+	i = FindFieldData(buff, field_id, &field_len);
+	if(i < 0) {
+		//error
+	} else {
+		len = strlen(buff);
+		memmove(buff +  i, buff + i + 6 + field_len, len - i - 6 - field_len + 1); //多复制1个'\0'
+	}
+		
+    return -1;
+}
+
+
+int SetFieldData(char *buff, int field_id, char *field_data, int size, int flag) {
+	int len, data_len;
+	char tmp_buf[10];
+    if(flag == 0) {
+        strcpy_s(buff, field_data, size);
         return 1;
     }
-    sprintf(fieldID, "%03X", iFieldID);
-    lLen = 3;
-    dLen = strlen(buff);
-//  memset(outBuff, 0, sizeof(outBuff));
-    for(p = buff, pOut = outBuff, flag = 1; p - buff < dLen - lLen - 3;) {
-        memcpy(tFieldID, p, 3);
-        p += 3;
-        tFieldID[3] = 0;
-        if(tFieldID[0] == ' ')break;
-        memcpy(tmpBuf, p, lLen);
-        p += lLen;
-        tmpBuf[lLen] = 0;
-        fieldLen = atoi(tmpBuf);
-        if(p - buff > dLen - fieldLen) break;
-        sprintf(tmpBuf, "%%0%dd", lLen);
-        memcpy(pOut, tFieldID, 3);
-        pOut += 3;
-        if(0 == memcmp(fieldID, tFieldID, 3)) {
-            if(strlen(fieldBuf) > size - (pOut + lLen - outBuff))
-                return -1;
-            sprintf(pOut, tmpBuf, strlen(fieldBuf));
-            pOut += lLen;
-            strcpy(pOut, fieldBuf);
-            pOut += strlen(fieldBuf);
-            flag = 0;
-        } else {
-            sprintf(pOut, tmpBuf, fieldLen);
-            pOut += lLen;
-            if(fieldLen > size - (pOut - outBuff))
-                return -1;
-            memcpy(pOut, p, fieldLen);
-            pOut += fieldLen;
-        }
-        p += fieldLen;
-    }
-    *pOut=0x00;
-    if(flag) {
-        sprintf(tmpBuf, "%%0%dd", lLen);
-        memcpy(pOut, fieldID, 3);
-        pOut += 3;
-        if(strlen(fieldBuf) > size - (pOut + lLen - outBuff))
-            return -1;
-        sprintf(pOut, tmpBuf, strlen(fieldBuf));
-        pOut += lLen;
-        strcpy(pOut, fieldBuf);
-        pOut += strlen(fieldBuf);
-    }
-    strcpy_safe(buff, outBuff, pOut - outBuff);
-//  memcpy(buff, outBuff, MIN(pOut - outBuff, size));
+    
+	DelFieldData(buff, field_id);
+	
+	len = strlen(buff);
+	data_len = strlen(field_data);
+	
+	if(len + 6 + data_len >= size) {
+		//error
+		return -1;
+	} else if(field_id > 0xfff || data_len > 999) {
+		//error
+		return -1;
+	} else {
+		snprintf(tmp_buf, sizeof(tmp_buf), "%03X%03d", field_id, data_len);
+		memcpy(buff + len, tmp_buf, 6);
+		strcpy(buff + len + 6, field_data);
+	}
+	
     return 1;
 }
 
 int SetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, short fieldID, glob_msg_stru * pub_data_stru) {
-    int ret, i;
     short d_field_id;
 
     InitTransLogServices(transLog);
@@ -304,7 +297,6 @@ int SetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, sho
 }
 
 int GetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, short fieldID, int size) {
-    int ret, i;
     char *value;
     InitTransLogServices(transLog);
     value = get_field_string("tl_trans_log_def", fieldName, transLog);
@@ -319,7 +311,7 @@ int GetTransLog(tl_trans_log_def *transLog, char *fieldName, char *fieldVal, sho
 }
 
 int db_to_pub_daba(glob_msg_stru * pub_data_stru, tl_trans_log_def *pTransLog) {
-    int i, j, k;
+    int i;
 //  char fldVal[256 + 1];
     InitTransLogServices(pTransLog);
 //  dcs_debug(0,0,"<%s> get_pub_field_id pay",__FUNCTION__);
@@ -331,11 +323,11 @@ int db_to_pub_daba(glob_msg_stru * pub_data_stru, tl_trans_log_def *pTransLog) {
 
     message_define *db_def = match_priv_stru(DB_MSG_TYPE, &gl_def_set);
 
-    for(j = 0; j < db_def->use_num; j++) {
-        char *value = get_field_string("tl_trans_log_def", db_def->fld_def[j].name, pTransLog);
+    for(i = 0; i < db_def->use_num; i++) {
+        char *value = get_field_string("tl_trans_log_def", db_def->fld_def[i].name, pTransLog);
         if(value != NULL) {
             rtrim(value);
-            add_pub_field(pub_data_stru, db_def->fld_def[j].id, DB_MSG_TYPE, strlen(value), value, 2);
+            add_pub_field(pub_data_stru, db_def->fld_def[i].id, DB_MSG_TYPE, strlen(value), value, 2);
         }
     }
     return 1;
