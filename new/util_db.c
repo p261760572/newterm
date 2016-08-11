@@ -98,7 +98,7 @@ tl_trans_log_def *g_translog;
 trans_log_handler_def *find_field_desc(const char *type, const char *field) {
     int i;
     for(i = 0; i < trans_log_services_size; i ++) {
-        if(strcasecmp(trans_log_services[i].type, type) == 0 && strcmp(trans_log_services[i].field, field) == 0) {
+        if(strcmp(trans_log_services[i].type, type) == 0 && strcasecmp(trans_log_services[i].field, field) == 0) {
             return &trans_log_services[i];
         }
     }
