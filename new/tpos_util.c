@@ -2325,7 +2325,8 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                       sizeof(term_id));
                 if(i >0) term_id[i]=0x00;
                 else term_id[0]=0x00;
-                if(0< get_advert_inf(pub_data_stru,term_id,advert_head,advert_inf,advert_tail)) {
+                if(0< get_advert_inf(pub_data_stru,term_id,advert_head,sizeof(advert_head),advert_inf,
+					                 sizeof(advert_inf),advert_tail,sizeof(advert_tail))) {
 //                  advert_inf[i]=0x00;
                     dcs_debug(0,0,"<%s>advert_head[%s],advert_inf[%s],advert_tail[%s]",__FUNCTION__,advert_head,advert_inf,advert_tail);
                     if(strlen(advert_head) >0 && strlen(advert_inf) >0) {
