@@ -14,6 +14,83 @@
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
+#define _ATOI(a, b, c) {char _tmp[10]; memcpy(_tmp, a, b); c=atoi(_tmp);}
+
+int my_substring(char *buf, int buf_len, char type, int start, int end, 
+									char *data_out, int size, void (*func)(char *)) { 		
+		int n;
+		if(!buf || !buf[0] || start >= buf_len) {
+				data_out[0] = '\0';
+				return 0;
+		}
+		if(type == 0x00) 
+			end = MIN(buf_len, start+end);
+		if(type == 0x01)
+			end = MIN(buf_len, end);
+		if(end < start) end = buf_len;
+		
+		n = MIN(size-1, end-start);
+		memcpy(data_out, buf+start, n);
+		data_out[n] = '\0';
+		if(n>0 && func) 
+			func(data_out);
+		return strlen(data_out);
+}
+
+int my_separate(char *buf, int buf_len, const char div, int start, int end, 
+								char *data_out, int size, void (*func)(char *)) {
+		char *p, *s;
+		int count = 0, len = 0, n;
+		if(!buf || !buf[0]) {
+				data_out[0] = '\0';
+				return 0;
+		}
+		if(end < start) end = start;
+		for(p = buf, s = p; count <= end; p++) {
+	      if(*p == div || *p == '\0') {
+        		if(count >= start) {
+				 	      n = MIN(size-1-len, p-s); 				
+				 	      if(n <= 0) break;
+		            memcpy(data_out+len, s, n);
+		            len += n;
+          	}
+          	if(*p == '\0')  break;
+          	s = p + 1;
+          	count++;
+        }
+    }
+    
+    data_out[len] = '\0';
+    if(len>0 && func) 
+			func(data_out);
+		return strlen(data_out);
+}
+
+
+int format_msg_data(char *data, int data_len, char *format, int len_start, 
+										int len_end, char *format_data, int size) {
+		if(!format || !format[0] ) return -1;
+		int format_len;
+		char format_type, div;
+		
+		format_type = format[0];
+				
+		if(format_type == '1') {											// 字符位截取
+				format_len = my_substring(data, data_len, 1, len_start, len_end, format_data, size, rtrim);
+		}
+		else if(format_type == '2') {									// 字符分割截取
+				div = format[1];
+				format_len = my_separate(data, data_len, div, len_start, len_end, format_data, size, rtrim);
+		}
+		else if(format_type == '3') {											// 字符位截取
+				format_len = my_substring(data, data_len, 1, len_start, len_end, format_data, size, NULL);
+		}
+		else if(format_type == '4') {									// 字符分割截取
+				div = format[1];
+				format_len = my_separate(data, data_len, div, len_start, len_end, format_data, size, NULL);
+		}
+		return format_len ;
+}
 
 void init_pub_data_stru(glob_msg_stru * pub_data_stru) {
     assert(pub_data_stru);  // 2016/7/20 星期三 下午 4:55:57
@@ -746,9 +823,9 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 第n+1个字节^结束符
 **************************************************************/
 int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
-    char fieldVal[256 + 1], *p, delimiter, tmpBuf[1024 + 1];
+    char fieldVal[256 + 1], *p, tmpBuf[1024 + 1];
     char *p1, buf[10 + 1], fieldName[40 +1], *msgtype, flag;
-    int fieldLen, start, end, i, data_from;
+    int fieldLen, start, end, i, data_from, n;
     rtrim(para);
     memset(tmpBuf, 0, sizeof(tmpBuf));
     for(p1 = tmpBuf, p = para; *p;) {
@@ -768,75 +845,30 @@ int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     data_from = 0;
                     break;
             }
-            if(*p == '1' || *p == '3') { //取数据固定长度，两个字节起起位值，两个字节结束位置(00表示到结尾)
-                flag = *p == '1' ? 0 : 1;
-                if(strlen(p) < 8) {
-                    dcs_log(0, 0, "<%s>参数[%s]设置出错(p=1 || p=3)", __FUNCTION__, p);
-                    return -1;
-                }
-                p++;
-                memcpy(buf, p, 2);
-                p += 2;
-                buf[2] = 0;
-                start = atoi(buf);
-                memcpy(buf, p, 2);
-                p += 2;
-                buf[2] = 0;
-                end = atoi(buf);
-                p++;
-                memcpy(buf, p, 2);
-                p += 2;
-                buf[2] = 0;
-                i = atoi(buf);
-                memcpy(fieldName, p, i);
-                p += i;
-                fieldName[i] = 0;
-                p++;
-                fieldLen = _get_field_data_safe(pub_data_stru,get_pub_field_id(msgtype, fieldName),
-                                                msgtype, fieldVal, data_from,sizeof(fieldVal));
-                if(end == 0 || end > fieldLen) end = fieldLen;
-                if(start < end) {
-                    memcpy(p1, fieldVal + start, end - start);
-                    p1 += end - start;
-                    for(i = end - start; i > 0 && ((*(p1 - 1) == ' ' && flag) || *(p1 - 1) == 0); p1--, i--);
-                }
-            } else if(*p =='2' || *p == '4') { //取分隔符数据, 一个字节分隔符，三个字节分隔符数
-                flag = *p == '2' ? 0 : 1;
-                if(strlen(p) < 8) {
-                    dcs_log(0, 0, "<%s>参数[%s]设置出错(p=2 || p=4)", __FUNCTION__, p);
-                    return -1;
-                }
-                p++;
-                delimiter = *p++;
-                memcpy(buf, p, 3);
-                p += 3;
-                buf[3] = 0;
-                end = atoi(buf);
-                p++;
-                memcpy(buf, p, 2);
-                p += 2;
-                buf[2] = 0;
-                i = atoi(buf);
-                memcpy(fieldName, p, i);
-                p += i;
-                fieldName[i] = 0;
-                p++;
-                fieldLen = _get_field_data_safe(pub_data_stru,get_pub_field_id(msgtype, fieldName),
-                                                msgtype, fieldVal, data_from,sizeof(fieldVal));
-                for(i = 0, start = 0; i < fieldLen; i++) {
-                    if(fieldVal[i] == delimiter)
-                        end--;
-                    else if(end == 0) {
-                        *p1++ = fieldVal[i];
-                        start++;
-                    } else if(end < 0)
-                        break;
-                }
-                for(i = end - start; i > 0 && ((*(p1 - 1) == ' ' && flag) == ' ' || *(p1 - 1) == 0); p1--, i--);
+            flag = *p <= '2' ? 0 : 1;
+            if(strlen(p) < 8) {
+                dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
+                return -1;
+            }
+            if(*p =='1' || *p == '3') {
+                _ATOI(p+1, 2, start);						// 获取开始位置
+                _ATOI(p+3, 2, end);							// 获取结束位置
+            } else if(*p =='2' || *p == '4') {
+            		_ATOI(p+2, 3, start);							// 获取开始位置
+            		end = start;
             } else {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
             }
+            _ATOI(p+6, 2, i);								// 获取字段长度
+            memcpy(fieldName, p+8, i);			// 获取字段名称
+            fieldName[i] = 0;
+            fieldLen = _get_field_data_safe(pub_data_stru,get_pub_field_id(msgtype, fieldName),
+                                            msgtype, fieldVal, data_from,sizeof(fieldVal));
+            n = format_msg_data(fieldVal, fieldLen, p, start, end, p1, sizeof(tmpBuf)-strlen(tmpBuf)-1);
+	       		p1 += n;
+	       		p += 8+i;
+	       		p++;														// 结束符
         } else if(*p == '\\') {
             memcpy(buf, p + 1, 2);
             p += 3;
@@ -869,8 +901,8 @@ int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
 第四：OPQ
  ************************************************************/
 int get_msg_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
-    char fieldVal[512 + 1], *p, flag, tmpBuf[1024 + 1], *p1, buf[10 + 1];
-    int fieldLen, start, end, i;
+    char fieldVal[512 + 1], *p, *ps, flag, tmpBuf[1024 + 1], *p1, buf[10 + 1];
+    int fieldLen, start, end, offset, n;
     rtrim(para);
     for(p = para; *p && *p != ','; p++);
     flag = *p;
@@ -886,54 +918,25 @@ int get_msg_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         return add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type,
                              fieldLen, fieldVal, 1);
     memset(tmpBuf, 0, sizeof(tmpBuf));
-    for(p1 = tmpBuf; *p;) {
+    ps = p;
+    for(p1 = tmpBuf; *p && p-ps<strlen(ps);) {
         if(*p == '#') {
             p++;
-            if(*p == '1') { //取数据固定长度，两个字节起起位值，两个字节结束位置(00表示到结尾)
-                if(strlen(p) < 5) {
-                    dcs_log(0, 0, "<%s>参数[%s]设置出错(p=1)", __FUNCTION__, p);
-                    return -1;
-                }
-                memcpy(buf, p + 1, 2);
-                p += 3;
-                buf[2] = 0;
-                start = atoi(buf);
-                memcpy(buf, p, 2);
-                p += 3;
-                buf[2] = 0;
-                end = atoi(buf);
-                if(end == 0 || end > fieldLen) end = fieldLen;
-                if(start < end) {
-                    memcpy(p1, fieldVal + start, end - start);
-                    p1 += end - start;
-                    for(i = end - start; i > 0 && (*(p1 - 1) == ' ' || *(p1 - 1) == 0); p1--, i--);
-                }
-            } else if(*p == '2') { //取分隔符数据, 一个字节分隔符，两个字节分隔符数
-                if(strlen(p) < 4) {
-                    dcs_log(0, 0, "<%s>参数[%s]设置出错(p=2)", __FUNCTION__, p);
-                    return -1;
-                }
-                p++;
-                memcpy(buf, p + 1, 2);
-                buf[2] = 0;
-                end = atoi(buf);
-                for(i = 0, start = 0; i < fieldLen; i++) {
-                    if(fieldVal[i] == *p)
-                        end--;
-                    else if(end == 0) {
-                        *p1++ = fieldVal[i];
-                        start++;
-                    } else if(end < 0)
-                        break;
-                }
-                for(i = end - start; i > 0 && (*(p1 - 1) == ' ' || *(p1 - 1) == 0); p1--, i--);
-//              p1++;
-                p += 3;
-                if(*p++ == 0) break;
-            } else {
+            if (*p == '1') {						// 截取字符
+                _ATOI(p+1, 2, start);
+                _ATOI(p+3, 2, end);
+                offset = 2*2+1;					//2*2为起止， 1结束符
+            } else if(*p == '2'){					// 分割字符					
+                _ATOI(p+2, 2, start);
+                end = start;
+                offset = 1+2+1;					// 1分隔符， 2起止符， 1结束符
+            }	else {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
             }
+	       		n = format_msg_data(fieldVal, fieldLen, p, start, end, p1, sizeof(tmpBuf)-strlen(tmpBuf)-1);
+	       		p1 += n;
+	       		p += offset+1;
         } else if(*p == '\\') {
             memcpy(buf, p + 1, 2);
             p += 3;
