@@ -53,9 +53,9 @@ int calculate_fee(char *para, short flag, glob_msg_stru *pub_data_stru) {
     fee = amount * rate / (1 - rate) + 0.5;
     if(fee > maxfee && maxfee > 0) fee = maxfee;
     sprintf(tmpBuf, "%08d", fee);
-    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 0);
     sprintf(tmpBuf, "%012d", fee + amount);
-    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 1);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(tmpBuf), tmpBuf, 0);
     return 1;
 }
 //账单支付
@@ -182,10 +182,10 @@ int bill_pay(glob_msg_stru *pub_data_stru) {
                   strlen(pay_term_no), pay_term_no, 1);
     if(0 > CalcFee(fee_type, fee_set, amount, pay_fee))
         return -1;
-    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(pay_fee), pay_fee, 1);
+    add_pub_field(pub_data_stru, FIELD_PAY_FEE, pub_data_stru->in_msg_type, strlen(pay_fee), pay_fee, 0);
     sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
     add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type,
-                  strlen(real_amount), real_amount, 1);
+                  strlen(real_amount), real_amount, 0);
     return 1;
 }
 int bill_fee_find(glob_msg_stru *pub_data_stru) {
@@ -241,7 +241,7 @@ int bill_fee_find(glob_msg_stru *pub_data_stru) {
     }
 //  add_pub_field(pub_data_stru, FIELD_PAY_FEE, strlen(pay_fee), pay_fee, 1, NULL);
     sprintf(real_amount, "%012ld", atol(pay_fee) + amount);
-    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 1);
+    add_pub_field(pub_data_stru, FIELD_AMOUNT_REAL, pub_data_stru->in_msg_type, strlen(real_amount), real_amount, 0);
     snprintf(tmpBuf,sizeof(tmpBuf), "定单信息:%s\n交易金额:%.2f元\n手续费:%.2f元\n合计:%.2f元",
              bill_info, amount/100.0, atol(pay_fee)/100.0, atol(real_amount) /100.0);
     add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "48"),

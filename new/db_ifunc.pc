@@ -51,7 +51,12 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
     field_val[8] = 0;
     SetTransLog(&translog, "SYS_DATE", field_val, 0, pub_data_stru);
     SetTransLog(&translog, "SYS_TIME", field_val + 9, 0, pub_data_stru);
-
+		
+		// 忽略签到， 参数下载
+		if(memcmp(pub_data_stru->in_trans_type, "0051", 4) == 0 || 
+				memcmp(pub_data_stru->in_trans_type, "0003", 4) == 0) 
+			return 1;
+			
     EXEC SQL DECLARE TRANSLOG_SAVE_SET_CUR CURSOR FOR
     SELECT TRANS_LOG_FIELD, FIELD_ID, DATA_FROM
     FROM TRANSLOG_SAVE_SET

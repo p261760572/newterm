@@ -1943,7 +1943,7 @@ int tpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
                 dcs_log(0, 0, "<%s> convert track date failed! ",__FUNCTION__);
                 return -1;
             }
-//          add_pub_field(pub_data_stru, 60, 15, "000005100900000", 1, NULL);
+          	add_pub_field(pub_data_stru, 60, pub_data_stru->in_msg_type, 15, "000005100900000", 1);
         } else {
             dcs_log(tmp,n,"<%s> can not prase 04",__FUNCTION__);
             return -1;
@@ -2140,7 +2140,7 @@ int tpos_trans_cancle(char *para, short flag, glob_msg_stru *pub_data_stru) {
             return -1;
         }
         update_pub_field(pub_data_stru, FIELD_AMOUNT_REAL,
-                         DB_MSG_TYPE,
+                         pub_data_stru->in_msg_type,
                          12, tPosLog.amount_real, 1);
         len=get_field_data_safe(pub_data_stru,
                                 FIELD_CARD_NO,

@@ -926,7 +926,7 @@ int get_msg_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                 _ATOI(p+1, 2, start);
                 _ATOI(p+3, 2, end);
                 offset = 2*2+1;					//2*2为起止， 1结束符
-            } else if(*p == '2'){					// 分割字符					
+            } else if(*p == '2') {					// 分割字符					
                 _ATOI(p+2, 2, start);
                 end = start;
                 offset = 1+2+1;					// 1分隔符， 2起止符， 1结束符

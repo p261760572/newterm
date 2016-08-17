@@ -82,7 +82,7 @@ struct DEFAULT_PROC gl_direct_proc[]= {  // 直接应答交易应用处理函数
     {"tpos_query_expenses",tpos_query_expenses}, //查询终端费用
     {"save_tc_value",save_tc_value},//对TC值上送的应答
     {"insti_login",insti_login},//对TC值上送的应答
-    {"tpos_settle",tpos_settle},//终端结算
+    {"tpos_settle",tpos_settle},//终端结算,
     {"",NULL}
 };
 struct DEFAULT_PROC gl_pre_field_conver[]= { //数据解包后字段域预处理函数

@@ -243,8 +243,8 @@ int tpos_pub_to_priv(short id ,const char *msg_type,const field_define *p_def,
     n=_get_field_data_safe(pub_data_stru,id,msg_type,tmp_buf,from,sizeof(tmp_buf));
     if(n <0) return -1;
 
-	dcs_debug(tmp_buf,n,"at %s(%s:%d) msg_type[%s] id=[%d] from=[%d]",__FUNCTION__,__FILE__,__LINE__,
-		msg_type, id, from);
+//	dcs_debug(tmp_buf,n,"at %s(%s:%d) msg_type[%s] id=[%d] from=[%d]",__FUNCTION__,__FILE__,__LINE__,
+//		msg_type, id, from);
 
     if(p_def->d_len_type == 0) { //¹Ì¶¨³¤¶È
         if(n >p_def->d_max_len) {
