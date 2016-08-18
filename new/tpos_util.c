@@ -1840,6 +1840,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
 }
 
 //增加60域数据处理 20140924
+// 增加实际金额存储	2016/8/18 星期四 上午 9:01:51
 int tpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
     //磁道信息解密
     char tmp[512],tmp1[600],return_code[4];
@@ -1847,6 +1848,16 @@ int tpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
     int n,outlen, i;
     ICS_DEBUG(0);
 //  dcs_debug(0,0,"<%s> begin ",__FUNCTION__);
+		if(_get_field_data_safe(pub_data_stru,
+	                              FIELD_AMOUNT,
+	                              pub_data_stru->in_msg_type,
+	                              tmp,0,sizeof(tmp))>0) {
+	   		add_pub_field(pub_data_stru,
+                      get_pub_field_id(DB_MSG_TYPE,"AMOUNT_REAL"),
+                      DB_MSG_TYPE,
+                      12, tmp, 2);	                           	
+	  }
+                              	
     if((n=get_field_data_safe(pub_data_stru,
                               get_pub_field_id(pub_data_stru->in_msg_type,"04"),
                               pub_data_stru->in_msg_type,
@@ -2141,7 +2152,7 @@ int tpos_trans_cancle(char *para, short flag, glob_msg_stru *pub_data_stru) {
         }
         update_pub_field(pub_data_stru, FIELD_AMOUNT_REAL,
                          pub_data_stru->in_msg_type,
-                         12, tPosLog.amount_real, 1);
+                         12, tPosLog.amount_real, 0);
         len=get_field_data_safe(pub_data_stru,
                                 FIELD_CARD_NO,
                                 pub_data_stru->in_msg_type,

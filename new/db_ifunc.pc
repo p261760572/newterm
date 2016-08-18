@@ -88,11 +88,11 @@ int db_genrate_insert(glob_msg_stru * pub_data_stru, int flag) {
             strcpy_s(msg_type, DB_MSG_TYPE, sizeof(msg_type));
         }
 
-        if(0 >(len= _get_field_data_safe(pub_data_stru, field_id, msg_type,
-                                         field_val, from,sizeof(field_val)))) {
-//          if(0 > get_field_data(field_id, pub_data_stru, field_val))
-            continue;
-        }
+//        if(0 >(len= _get_field_data_safe(pub_data_stru, field_id, msg_type,
+//                                         field_val, from,sizeof(field_val)))) {
+        if(0 > get_field_data_safe(pub_data_stru, field_id, msg_type, field_val ,sizeof(field_val)))
+          continue;
+        
         //field_val[len]=0x00;
         if(0 > SetTransLog(&translog, trans_log_field, field_val, field_id, pub_data_stru)) {
             dcs_log(0, 0, "at %s(%s:%d) SetTransLog消息类型[%s]定义域[%s]出错",__FUNCTION__,__FILE__,__LINE__, msg_type, field_name);

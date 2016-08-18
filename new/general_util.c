@@ -3274,7 +3274,7 @@ int cacl_discount_1(char *amount,char *para,glob_msg_stru *pub_data_stru) {
         if(i >0) {
 
             sprintf(begin_amount,"%012ld",atol(amount)-atol(discount_amount));
-            add_pub_field(pub_data_stru,FIELD_AMOUNT_REAL,pub_data_stru->in_msg_type,12,begin_amount, 1);
+            add_pub_field(pub_data_stru,FIELD_AMOUNT_REAL,pub_data_stru->in_msg_type,12,begin_amount, 0);
             add_pub_field(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "AMOUNT_REAL"),
                           DB_MSG_TYPE,12,begin_amount, 2);
 //           dcs_debug(0,0,"<%s> real_amount=[%s]",__FUNCTION__,begin_amount);

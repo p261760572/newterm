@@ -268,6 +268,17 @@ int zpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
 //  unsigned char *p;
     int n,outlen, i;
     ICS_DEBUG(0);
+    
+    if(_get_field_data_safe(pub_data_stru,
+	                              FIELD_AMOUNT,
+	                              pub_data_stru->in_msg_type,
+	                              tmp,0,sizeof(tmp))>0) {
+	   		add_pub_field(pub_data_stru,
+                      get_pub_field_id(DB_MSG_TYPE,"AMOUNT_REAL"),
+                      DB_MSG_TYPE,
+                      12, tmp, 2);	                           	
+	  }
+	  
     if((n=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"36"),
                               pub_data_stru->in_msg_type,tmp,sizeof(tmp)))>0) {
         tmp[n]=0x00;
