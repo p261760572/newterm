@@ -3106,6 +3106,8 @@ int err_set_msg(glob_msg_stru *pub_data_stru) {
     snprintf(pub_data_stru->route_mac_index ,6 ,"%s",pub_data_stru->in_mac_index);
     snprintf(pub_data_stru->route_mac_key   ,33 ,"%s",pub_data_stru->in_mac_key);
     snprintf(pub_data_stru->route_trans_type, 5,"%s",pub_data_stru->in_trans_type);
+    pub_data_stru->route_is_check_mac=pub_data_stru->is_check_mac;
+    pub_data_stru->route_insti_work_type=pub_data_stru->insti_work_type;
     if(pub_data_stru->center_result_code[0] == 0)
         strcpy(pub_data_stru->center_result_code, CODE_SYSTEM_ERR);
 
