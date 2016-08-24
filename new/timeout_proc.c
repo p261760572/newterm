@@ -122,9 +122,9 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
             pub_data_stru->timeout_table.flag[0]++;
             insert_timeout_table(pub_data_stru, 2);
             _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,8);
+                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,9);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
-                                 DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,4);
+                                 DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,5);
             saveflag = 1;
             break;
         case '3'://查询查复，并应答给终端
@@ -132,9 +132,9 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
             pub_data_stru->timeout_table.flag[0]++;
             insert_timeout_table(pub_data_stru, 2);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,8);
+                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,9);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
-                                 DB_MSG_TYPE,pub_data_stru->route_trans_type, 2,4);
+                                 DB_MSG_TYPE,pub_data_stru->route_trans_type, 2,5);
             saveflag = 1;
             break;
         case '2'://冲正处理
@@ -150,9 +150,9 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
         case '5'://直接应答给终端
             strcpy(pub_data_stru->center_result_code, CODE_TIME_OUT);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,8);
+                                 DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,9);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
-                                 DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,4);
+                                 DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,5);
             saveflag = 1;
             break;
         case '6'://交易结果通知

@@ -190,7 +190,7 @@ int bill_pay(glob_msg_stru *pub_data_stru) {
 }
 int bill_fee_find(glob_msg_stru *pub_data_stru) {
     char tmpBuf[255];
-    int amount, len;
+    int amount, len, bill_id;
     char pay_fee[8 + 1];
     char real_amount[12 + 1];
     char fee_type          [1 + 1] ;
@@ -204,7 +204,11 @@ int bill_fee_find(glob_msg_stru *pub_data_stru) {
         return -1;
     }
     amount = atol(tmpBuf);
-    if(0 >(len= get_field_data_safe(pub_data_stru, get_pub_field_id(pub_data_stru->in_msg_type, "44"),
+    if(memcmp(pub_data_stru->in_msg_type, "TPOS", 4) == 0) 
+    	bill_id = get_pub_field_id(pub_data_stru->in_msg_type, "09");
+    else 
+    	bill_id = get_pub_field_id(pub_data_stru->in_msg_type, "44");
+    if(0 >(len= get_field_data_safe(pub_data_stru, bill_id,
                                     pub_data_stru->in_msg_type, tmpBuf,sizeof(tmpBuf)))) {
         dcs_log(0, 0, "at %s(%s:%d) È¡¶©µ¥ºÅÓò[%d]³ö´í£¡",__FUNCTION__,__FILE__,__LINE__, FIELD_BILL);
         strcpy(pub_data_stru->center_result_code, CODE_PACK_ERR);

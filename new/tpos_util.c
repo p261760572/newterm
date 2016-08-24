@@ -2763,20 +2763,20 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     memcpy(fmtMsgBuf + len, pub_data_stru->center_result_code, 3);
     len += 3;
 //  flag=0;
-    for(p1=my_split(p1,'|',tmp,sizeof(tmp)); p; p=my_split(p1,'|',tmp,sizeof(tmp))) {
+    for(p=my_split(p1,'|',tmp,sizeof(tmp)); p; p=my_split(p,'|',tmp,sizeof(tmp))) {
         p=tmp;
         while(*p) {
             if(*p == '#') {
                 p++;
                 {
                     if(strlen(p) >3) {
-                        memcpy(tmp,p,3);
-                        tmp[3]=0x00;
+                        memcpy(tmpbuf,p,3);
+                        tmpbuf[3]=0x00;
                     } else {
-                        snprintf(tmp,sizeof(tmp),"%s",p);
-                        tmp[strlen(p)]=0x00;
+                        snprintf(tmpbuf,sizeof(tmpbuf),"%s",p);
+                        tmpbuf[strlen(p)]=0x00;
                     }
-                    switch(atoi(tmp)) {
+                    switch(atoi(tmpbuf)) {
                         case FIELD_AMOUNT:
                             fieldLen = get_field_data_safe(pub_data_stru,FIELD_AMOUNT,
                                                            pub_data_stru->in_msg_type,
@@ -2815,7 +2815,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                             break;
                         case FIELD_BALANCE:
                         case FIELD_BALANCE_1:
-                            fieldLen = get_field_data_safe(pub_data_stru,atoi(tmp),
+                            fieldLen = get_field_data_safe(pub_data_stru,atoi(tmpbuf),
                                                            pub_data_stru->in_msg_type,
                                                            fieldVal,sizeof(fieldVal));
                             if(fieldLen <=0) break;
@@ -2831,7 +2831,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                             len += fieldLen;
                             break;
                         default:
-                            fieldLen = get_field_data_safe(pub_data_stru,atoi(tmp),
+                            fieldLen = get_field_data_safe(pub_data_stru,atoi(tmpbuf),
                                                            pub_data_stru->in_msg_type,
                                                            fieldVal,sizeof(fieldVal));
                             if(fieldLen <=0) break;
@@ -2848,8 +2848,8 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     else    p=p+strlen(p);
                 }
             } else if(*p == '\\') {
-                memcpy(tmp, p + 1, 2);
-                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmp, 2, 1);
+                memcpy(tmpbuf, p + 1, 2);
+                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmpbuf, 2, 1);
                 len += 1;
                 p=p+3;
             } else {
@@ -2874,6 +2874,7 @@ int tpos_get_last_addidata(char *para, short flag, glob_msg_stru * pub_data_stru
     struct  tm *tm;
     time_t  t;
     memset(&TransLog, 0, sizeof(TransLog));
+    
     if(0 > get_field_data_safe(pub_data_stru, FIELD_TRA_NO, pub_data_stru->in_msg_type,
                                TransLog.acq_tra_no,7)) {
         dcs_log(0, 0, "<%s>取数据域[%d]出错", __FUNCTION__, FIELD_TRA_NO);
@@ -2890,6 +2891,7 @@ int tpos_get_last_addidata(char *para, short flag, glob_msg_stru * pub_data_stru
         dcs_log(0, 0, "<%s>取数据域[%d]出错", __FUNCTION__, FIELD_INSTI_CODE);
         return -1;
     }
+    
     time(&t);
     tm = localtime(&t);
     snprintf(fldVal,sizeof(fldVal),"%4d%02d%02d",
@@ -3207,6 +3209,8 @@ int tpos_settle(glob_msg_stru * pub_data_stru) {
         dcs_log(0,0,"<%s> get_psam_no fail!",__FUNCTION__);
         return -1;
     }
+    add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE,"ACQ_TERM_ID1"), 
+    							DB_MSG_TYPE, sizeof(psam), psam, 2);
     memset(&terminfo,0,sizeof(terminfo));
     if(0>get_tpos_info(psam,&terminfo)) {
         dcs_log(0,0,"<%s> get_tpos_info fail!",__FUNCTION__);

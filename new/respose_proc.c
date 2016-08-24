@@ -15,7 +15,7 @@ int response_msg_proc(glob_msg_stru *pub_data_stru) {
     int flag;
     ICS_DEBUG(0);
     memset(acq_insti_code, 0, sizeof(acq_insti_code));
-//  sleep(3);
+ //   sleep(20);
     if(0 > delete_timeout_table(pub_data_stru)) { //É¾³ý³¬Ê±±í
         return -1;
     }

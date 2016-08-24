@@ -1955,6 +1955,7 @@ int iso_check_mac_all_des(char *para, short flag, glob_msg_stru *pub_data_stru) 
     int bufLen, macLen, headLen = 0;
     field_define *def;
     ICS_DEBUG(0);
+    if(!pub_data_stru->is_check_mac) return 1;
     memset(inMacBuf, 0, sizeof(inMacBuf));
     macLen = _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, inMacBuf, 0,sizeof(inMacBuf));
     if(macLen <= 0) {
@@ -2042,6 +2043,7 @@ int iso_check_mac_all_3des(char *para, short flag, glob_msg_stru *pub_data_stru)
     int bufLen, macLen, headLen= 0;
     field_define *def=NULL;
     ICS_DEBUG(0);
+    if(!pub_data_stru->is_check_mac) return 1;
     memset(inMacBuf, 0, sizeof(inMacBuf));
     macLen = _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, inMacBuf, 0,sizeof(inMacBuf));
     if(macLen <= 0) {
@@ -2133,6 +2135,7 @@ int iso_check_mac_cbc_3des(char *para, short flag, glob_msg_stru *pub_data_stru)
     ICS_DEBUG(0);
     memset(inMacBuf, 0, sizeof(inMacBuf));
     dcs_debug(0,0,"<%s> begin ",__FUNCTION__);
+    if(!pub_data_stru->is_check_mac) return 1;
     macLen = _get_field_data_safe(pub_data_stru, FIELD_MAC, pub_data_stru->in_msg_type, inMacBuf, 0,sizeof(inMacBuf));
     if(macLen <= 0) {
         if(0 == strcmp(pub_data_stru->center_result_code, "00") || pub_data_stru->center_result_code[0] == 0) {
@@ -3397,11 +3400,9 @@ int reply_acq(glob_msg_stru *pub_data_stru) {
     pub_data_stru->switch_src_flag=1;
     if(db_update(pub_data_stru, 0) <0) return -1;
     len=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                             pub_data_stru->route_msg_type, pub_data_stru->route_insti_code, 2,9);
-    if(len >0) pub_data_stru->route_insti_code[len]=0x00;
+                             DB_MSG_TYPE, pub_data_stru->route_insti_code, 2,9);
     len=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),
-                             pub_data_stru->route_msg_type, pub_data_stru->route_trans_type, 2,5);
-    if(len >0) pub_data_stru->route_trans_type[len]=0x00;
+                             DB_MSG_TYPE, pub_data_stru->route_trans_type, 2,5);
     if(0 > get_route_insti_info(pub_data_stru)) //获取路由机构信息
         return -1;
     if(0 > conver_data(pub_data_stru, 1)) //报文转换

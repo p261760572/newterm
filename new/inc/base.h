@@ -86,7 +86,7 @@
 //超时表基本结构
 
 typedef struct{
-	char foldname[40];
+	char foldname[8 + 1];
 	char sys_date[8 + 1];
 	char sys_time[6 + 1]; 
 	char key[80 + 1];    //报文关键字

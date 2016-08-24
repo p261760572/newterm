@@ -156,17 +156,17 @@ int app_proc(const char *msg_type,char *src_buf,int src_len,
                 return -1;
             }
             pub_data_stru.route_priv_def=pub_data_stru.in_priv_def;
-
-        } else if(!(pub_data_stru.switch_src_flag) &&
-                  pub_data_stru.use_timeout) {
-            if(0>insert_timeout_table(&pub_data_stru,1)) {
-                dcs_log(0,0,"<%s> insert_timeout_table error!",__FUNCTION__);
-                return -1;
-            }
-        }
+            pub_data_stru.use_timeout=0;
+        } 
     }
 
-
+    if(!(pub_data_stru.switch_src_flag) &&
+                pub_data_stru.use_timeout) {
+          if(0>insert_timeout_table(&pub_data_stru,1)) {
+              dcs_log(0,0,"<%s> insert_timeout_table error!",__FUNCTION__);
+              return -1;
+          }
+      }
     dcs_debug(0,0,"<%s>begin pack_msg",__FUNCTION__);
     return pack_msg(&pub_data_stru,desc_buf,desc_size);
 }
