@@ -2274,15 +2274,19 @@ int get_end_trans(char *para, short flag, glob_msg_stru *pub_data_stru) {
         return -1;
     }
     strcpy_s(pub_data_stru->center_result_code, CODE_TRANS_ERR, sizeof(pub_data_stru->center_result_code));
+    
     return -1;
 }
 
 int end_trans(glob_msg_stru *pub_data_stru) {
     tl_trans_log_def TransLog;
     int field_id, term_id1, term_id2;
+    char show_err[512], v_app_name[40+1];
     
+    memset(show_err, 0, sizeof(show_err));
+    memset(&TransLog, 0, sizeof(TransLog));
     if(memcmp(pub_data_stru->in_msg_type, "TPOS", 4) == 0) {
-    		field_id = get_pub_field_id(pub_data_stru->in_msg_type, "09");
+    		field_id = get_pub_field_id(pub_data_stru->in_msg_type, "08");
     		term_id1 = get_pub_field_id(pub_data_stru->in_msg_type, "PSAM_NO");
     		term_id2 = FIELD_TERM_ID2;
     }
@@ -2293,8 +2297,8 @@ int end_trans(glob_msg_stru *pub_data_stru) {
     }
     if(0 > get_field_data_safe(pub_data_stru,field_id,pub_data_stru->in_msg_type, 
     														TransLog.pay_acct_no,sizeof(TransLog.pay_acct_no))) {
-        dcs_log(0, 0, "at %s(%s:%d), 取付款数据域[%s]出错！",__FUNCTION__,__FILE__,__LINE__, "44(09)");
-        return -1;
+        dcs_log(0, 0, "at %s(%s:%d), 取付款数据域[%s]出错！进行终端末笔交易查询",
+        				__FUNCTION__,__FILE__,__LINE__, "44(08)");
     }
     get_field_data_safe(pub_data_stru, term_id1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
     get_field_data_safe(pub_data_stru, term_id2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,17);
@@ -2350,7 +2354,8 @@ int end_trans(glob_msg_stru *pub_data_stru) {
        RESP_CD_AUTH_ID ,
        STEP            ,
        VOID_FLAG       ,
-       PERMIT_VOID
+       PERMIT_VOID		 ,
+       APP_NAME
     INTO
        :TransLog.sys_date        ,
        :TransLog.sys_time        ,
@@ -2400,14 +2405,16 @@ int end_trans(glob_msg_stru *pub_data_stru) {
        :TransLog.resp_cd_auth_id ,
        :TransLog.step            ,
        :TransLog.void_flag          ,
-       :TransLog.permit_void
+       :TransLog.permit_void		,
+       :v_app_name
     FROM
     (
-       SELECT * FROM TRANSLOG
+       SELECT T.*, T2.APP_NAME FROM TRANSLOG T, SETTLE_APP_TYPE T2
        WHERE
         SYS_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD') AND ACQ_INSTI_CODE = :pub_data_stru->insti_code
         AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
-        AND PAY_ACCT_NO = :TransLog.pay_acct_no
+        AND PAY_ACCT_NO = nvl(:TransLog.pay_acct_no,PAY_ACCT_NO)
+        AND T.APP_TYPE = T2.APP_TYPE
        ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
     )
     WHERE ROWNUM = 1;
@@ -2417,6 +2424,195 @@ int end_trans(glob_msg_stru *pub_data_stru) {
                 __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
                 pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
         strcpy_s(pub_data_stru->center_result_code, CODE_NOT_EXIST, sizeof(pub_data_stru->center_result_code));
+        sprintf(show_err, "未找到交易记录！");
+        add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
+                          pub_data_stru->in_msg_type, strlen(show_err),show_err,1);
+        return 1;
+    }
+    if(sqlca.sqlcode) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], PAY_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
+        return -1;
+    }
+    rtrim(v_app_name);
+    strcpy_s(pub_data_stru->center_result_code, "00", sizeof(pub_data_stru->center_result_code));
+    sprintf(show_err, "交易类型：%s\n交易日期：%s\n交易时间：%s\n交易卡号："
+    									"%s\n交易金额：%.2f元\n交易返回码：%s\n交易状态：%s",
+    									v_app_name, TransLog.acq_date, TransLog.acq_time, TransLog.pay_acct_no,
+    									atof(TransLog.amount_real)/100, TransLog.resp_cd_rcv, 
+    									TransLog.void_flag[0] == '0'?"正常":"已冲正");
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
+                          pub_data_stru->in_msg_type, strlen(show_err),show_err,1);
+    /*                      
+    if(memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0') {
+    //    if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
+        return 1;
+    }
+    if(memcmp("00", TransLog.resp_cd_rcv, 2)) {
+        strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
+        return 1;
+    }
+    strcpy_s(pub_data_stru->center_result_code, CODE_TRANS_ERR, sizeof(pub_data_stru->center_result_code)); */
+    return 1;
+}
+
+int end_trans_print(glob_msg_stru *pub_data_stru) {
+    tl_trans_log_def TransLog;
+    int field_id, term_id1, term_id2;
+    char show_err[512], v_app_name[40+1], mchnt_name[60+1];
+    
+    memset(show_err, 0, sizeof(show_err));
+    memset(&TransLog, 0, sizeof(TransLog));
+    if(memcmp(pub_data_stru->in_msg_type, "TPOS", 4) == 0) {
+    		field_id = get_pub_field_id(pub_data_stru->in_msg_type, "08");
+    		term_id1 = get_pub_field_id(pub_data_stru->in_msg_type, "PSAM_NO");
+    		term_id2 = FIELD_TERM_ID2;
+    }
+    else {
+    		field_id = get_pub_field_id(pub_data_stru->in_msg_type, "44");
+    		term_id1 = FIELD_TERM_ID1;
+    		term_id2 = FIELD_TERM_ID2;
+    }
+    if(0 > get_field_data_safe(pub_data_stru,field_id,pub_data_stru->in_msg_type, 
+    														TransLog.pay_acct_no,sizeof(TransLog.pay_acct_no))) {
+        dcs_log(0, 0, "at %s(%s:%d), 取付款数据域[%s]出错！进行终端末笔交易查询",
+        				__FUNCTION__,__FILE__,__LINE__, "44(08)");
+    }
+    get_field_data_safe(pub_data_stru, term_id1, pub_data_stru->in_msg_type, TransLog.acq_term_id1,17);
+    get_field_data_safe(pub_data_stru, term_id2, pub_data_stru->in_msg_type, TransLog.acq_term_id2,17);
+    if(TransLog.acq_term_id1[0] == 0) strcpy(TransLog.acq_term_id1, "NULL");
+    if(TransLog.acq_term_id2[0] == 0) strcpy(TransLog.acq_term_id2, "NULL");
+		
+    add_pub_field(pub_data_stru, get_pub_field_id(DB_MSG_TYPE,"ACQ_TERM_ID1"), 
+    							DB_MSG_TYPE, sizeof(TransLog.acq_term_id1), TransLog.acq_term_id1, 2);
+    							
+    EXEC SQL SELECT
+       SYS_DATE        ,
+       SYS_TIME        ,
+       QS_DATE         ,
+       ACQ_INSTI_CODE  ,
+       PAY_INSTI_CODE  ,
+       APP_INSTI_CODE  ,
+       ACQ_MSG_TYPE    ,
+       ACQ_TRANS_TYPE  ,
+       APP_TYPE        ,
+       PAY_MSG_TYPE    ,
+       PAY_TRANS_TYPE  ,
+       APP_MSG_TYPE    ,
+       APP_TRANS_TYPE  ,
+       RESP_CD_APP     ,
+       RESP_CD_PAY     ,
+       RESP_CD_RCV     ,
+       substr(PAY_ACCT_NO,1,6)||'******'||substr(trim(PAY_ACCT_NO), -4),
+       CARD_ATTR       ,
+       ISS_INSTI_CODE  ,
+       AMOUNT_PAY      ,
+       AMOUNT_REAL     ,
+       FEE             ,
+       ACQ_TRA_NO      ,
+       PAY_TRA_NO      ,
+       APP_TRA_NO      ,
+       ACQ_DATE        ,
+       ACQ_TIME        ,
+       PAY_DATE        ,
+       PAY_TIME        ,
+       APP_DATE        ,
+       APP_TIME        ,
+       ACQ_TERM_ID1    ,
+       ACQ_TERM_ID2    ,
+       PAY_TERM_ID1    ,
+       PAY_TERM_ID2    ,
+       APP_TERM_ID1    ,
+       APP_TERM_ID2    ,
+       ACQ_ADDITION    ,
+       PAY_ADDITION    ,
+       APP_ADDITION    ,
+       SYS_REF_NO      ,
+       POS_ENTRY_MD_CD ,
+       POS_COND_CD     ,
+       RCV_ACCT_NO     ,
+       TRANS_CURR_CD   ,
+       RESP_CD_AUTH_ID ,
+       STEP            ,
+       VOID_FLAG       ,
+       PERMIT_VOID		 ,
+       APP_NAME				 ,
+       NAME
+    INTO
+       :TransLog.sys_date        ,
+       :TransLog.sys_time        ,
+       :TransLog.qs_date         ,
+       :TransLog.acq_insti_code  ,
+       :TransLog.pay_insti_code  ,
+       :TransLog.app_insti_code  ,
+       :TransLog.acq_msg_type    ,
+       :TransLog.acq_trans_type  ,
+       :TransLog.app_type        ,
+       :TransLog.pay_msg_type    ,
+       :TransLog.pay_trans_type  ,
+       :TransLog.app_msg_type    ,
+       :TransLog.app_trans_type  ,
+       :TransLog.resp_cd_app     ,
+       :TransLog.resp_cd_pay     ,
+       :TransLog.resp_cd_rcv     ,
+       :TransLog.pay_acct_no     ,
+       :TransLog.card_attr       ,
+       :TransLog.iss_insti_code  ,
+       :TransLog.amount_pay      ,
+       :TransLog.amount_real     ,
+       :TransLog.fee             ,
+       :TransLog.acq_tra_no      ,
+       :TransLog.pay_tra_no      ,
+       :TransLog.app_tra_no      ,
+       :TransLog.acq_date        ,
+       :TransLog.acq_time        ,
+       :TransLog.pay_date        ,
+       :TransLog.pay_time        ,
+       :TransLog.app_date        ,
+       :TransLog.app_time        ,
+       :TransLog.acq_term_id1    ,
+       :TransLog.acq_term_id2    ,
+       :TransLog.pay_term_id1    ,
+       :TransLog.pay_term_id2    ,
+       :TransLog.app_term_id1    ,
+       :TransLog.app_term_id2    ,
+       :TransLog.acq_addition    ,
+       :TransLog.pay_addition    ,
+       :TransLog.app_addition    ,
+       :TransLog.sys_ref_no      ,
+       :TransLog.pos_entry_md_cd ,
+       :TransLog.pos_cond_cd     ,
+       :TransLog.rcv_acct_no     ,
+       :TransLog.trans_curr_cd   ,
+       :TransLog.resp_cd_auth_id ,
+       :TransLog.step            ,
+       :TransLog.void_flag          ,
+       :TransLog.permit_void		,
+       :v_app_name							 ,
+       :mchnt_name
+    FROM
+    (
+       SELECT T.*, T2.APP_NAME,T3.NAME FROM TRANSLOG T, SETTLE_APP_TYPE T2, TPOS_INFO T3
+       WHERE
+        SYS_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD') AND ACQ_INSTI_CODE = :pub_data_stru->insti_code
+        AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
+        AND PAY_ACCT_NO = nvl(:TransLog.pay_acct_no,PAY_ACCT_NO)
+        AND T.APP_TYPE = T2.APP_TYPE
+        and T.ACQ_TERM_ID1 = T3.PSAM
+       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+    )
+    WHERE ROWNUM = 1;
+    if(sqlca.sqlcode == 1403) {
+        dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT TRANSLOG Error.\n"
+                "ACQ_INSTI_CODE[%s], ACQ_TERM_ID1[%s], ACQ_TERM_ID2[%s], PAY_ACCT_NO[%s]",
+                __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,
+                pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
+        strcpy_s(pub_data_stru->center_result_code, CODE_NOT_EXIST, sizeof(pub_data_stru->center_result_code));
+        sprintf(show_err, "未找到交易记录！");
+        add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
+                          pub_data_stru->in_msg_type, strlen(show_err),show_err,1);
         return -1;
     }
     if(sqlca.sqlcode) {
@@ -2426,18 +2622,31 @@ int end_trans(glob_msg_stru *pub_data_stru) {
                 pub_data_stru->insti_code, TransLog.acq_term_id1, TransLog.acq_term_id2, TransLog.pay_acct_no);
         return -1;
     }
-    if(memcmp("00", TransLog.resp_cd_rcv, 2)==0 && TransLog.void_flag[0] == '0') {
-        if(0 > db_to_pub_daba(pub_data_stru, &TransLog)) return -1;
-        return 1;
-    }
-    if(TransLog.void_flag[0] == '0') {
-        strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
-        return -1;
-    }
-    strcpy_s(pub_data_stru->center_result_code, CODE_TRANS_ERR, sizeof(pub_data_stru->center_result_code));
-    return -1;
+    rtrim(v_app_name);
+    rtrim(TransLog.resp_cd_rcv);
+    rtrim(TransLog.pay_acct_no);
+    rtrim(mchnt_name);
+    rtrim(TransLog.pay_term_id1);
+    rtrim(TransLog.pay_term_id2);
+    
+    if(TransLog.void_flag[0] == '1') {
+    		strcpy_s(pub_data_stru->center_result_code, CODE_INVALID_TRANS, sizeof(pub_data_stru->center_result_code));
+    		return -1;
+    }/*
+    strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
+    sprintf(show_err, "      (重打印)\n特约商户名称：\n%s\n"
+    									"终端编号：\n%s\n特约商户编号：\n%s\n"
+    									"交易卡号：\n%s\n交易类型:%s\n"
+    									"日期/时间：\n%s\n交易参考号：%s\n"
+    									"交易流水号：%s\n交易金额：%.2f元",
+    									mchnt_name, TransLog.pay_term_id1, TransLog.pay_term_id2, 
+    									v_app_name, TransLog.acq_date, TransLog.acq_time, TransLog.pay_acct_no,
+    									TransLog.acq_tra_no, TransLog.sys_ref_no, atof(TransLog.amount_real)/100);
+    add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
+                          pub_data_stru->in_msg_type, strlen(show_err),show_err,1);
+    */
+    return 1;
 }
-
 //关闭游标
 //增加根据数PRIV_DEF配置是否为压缩数据 20140910
 int save_addidata(glob_msg_stru *pub_data_stru, int data_flag) { //保存附加数据

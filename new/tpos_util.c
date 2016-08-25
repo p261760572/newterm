@@ -2840,6 +2840,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,para, len, fieldLen);
                                 return -1;
                             }
+                    
                             memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
                             len += fieldLen;
                             break;

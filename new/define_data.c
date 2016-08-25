@@ -72,6 +72,7 @@ struct DEFAULT_PROC gl_direct_proc[]= {  // 直接应答交易应用处理函数
     {"link_test",tpos_link_test},//tpos链路测试
     {"tpos_reversed", tpos_reversed}, // tpos冲正
     {"get_end_trans", end_trans},
+    {"end_trans_print", end_trans_print},   // 末笔交易补打
     {"app_reversed", app_reversed}, //冲正
     {"sign_request", sign_request},
     {"key_reset", key_reset},//密钥重置
