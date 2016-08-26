@@ -1340,12 +1340,15 @@ int get_seq(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     if(seqlen < 3) seqlen = 6;
     if(seqlen > 20) seqlen = 20;
 
+	dcs_debug(0,0,"at %s(%s:%d) tmp[%p][%s] seq[%p]",__FUNCTION__,__FILE__,__LINE__,tmp, tmp, &seq);
     EXEC SQL SELECT INSTI_SEQ INTO :seq FROM INSTI_INFO WHERE INSTI_CODE = :tmp FOR UPDATE;
     if(sqlca.sqlcode) {
         dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT INSTI_INFO Error. INSTI_CODE[%s]",
                 __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode,pub_data_stru->route_insti_code);
         return -1;
     }
+	dcs_debug(0,0,"at %s(%s:%d) tmp[%p][%s] seq[%p]",__FUNCTION__,__FILE__,__LINE__,tmp, tmp, &seq);
+	
     seq++;
     if(seq > 999999)    seq = 1;
     snprintf(buf,sizeof(buf), "%%0%dd", seqlen);
@@ -1369,12 +1372,14 @@ int get_ref(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     int seqlen;
     ICS_DEBUG(0);
 
+	dcs_debug(0,0,"at %s(%s:%d) ref[%p]",__FUNCTION__,__FILE__,__LINE__, &ref);
     EXEC SQL SELECT TRANS_REF INTO :ref FROM SYS_PARA WHERE PARA_ID = 'TRANS_REF' FOR UPDATE;
     if(sqlca.sqlcode) {
         dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, SELECT SYS_PARA Error. PARA_ID[TRANS_REF]",
                 __FUNCTION__,__FILE__,__LINE__,sqlca.sqlcode);
         return -1;
     }
+	dcs_debug(0,0,"at %s(%s:%d) ref[%p]",__FUNCTION__,__FILE__,__LINE__, &ref);
     ref++;
     if(ref > 999999999999) ref = 1;
     seqlen=sprintf(refStr, "%012ld", ref);
