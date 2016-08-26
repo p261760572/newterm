@@ -1515,7 +1515,7 @@ int get_msg_data_tlvfill(char *para, short fldid, glob_msg_stru *pub_data_stru) 
             memcpy(tmpBuf+fieldLen,tmp+1,strlen(tmp+1));
             fieldLen +=strlen(tmp+1);
             tmpBuf[fieldLen]=0x00;
-        } else if(p && tmp[0] == '?' && strlen(p)>1) {
+        } else if(p && tmp[0] == '?' && strlen(tmp)>1) {
             i=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, tmp+1),
                                   DB_MSG_TYPE,fieldVal,sizeof(fieldVal));
             if(i > 0 && (i+fieldLen) <1024) {
@@ -2257,17 +2257,17 @@ int reversed_replay(glob_msg_stru * pub_data_stru) {
         */
         memset(&log,0,sizeof(log));
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"),
-                             pub_data_stru->route_msg_type, log.sys_date      , 2,9);
+                             DB_MSG_TYPE, log.sys_date      , 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                             pub_data_stru->route_msg_type, log.acq_insti_code, 2,9);
+                             DB_MSG_TYPE, log.acq_insti_code, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"),
-                             pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7);
+                             DB_MSG_TYPE, log.acq_tra_no    , 2,7);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"),
-                             pub_data_stru->route_msg_type, log.acq_date      , 2,8);
+                             DB_MSG_TYPE, log.acq_date      , 2,8);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                             pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id1  , 2,17);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
-                             pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id2  , 2,17);
         update_db_voidflag(&log, '2', NULL);
 
     }
@@ -2291,17 +2291,17 @@ int find_replay(glob_msg_stru * pub_data_stru) {
 
         memset(&transLog,0,sizeof(transLog));
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"),
-                             pub_data_stru->route_msg_type, transLog.sys_date, 2,9);
+                             DB_MSG_TYPE, transLog.sys_date, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                             pub_data_stru->route_msg_type, transLog.acq_insti_code, 2,9);
+                             DB_MSG_TYPE, transLog.acq_insti_code, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"),
-                             pub_data_stru->route_msg_type, transLog.acq_tra_no, 2,7);
+                             DB_MSG_TYPE, transLog.acq_tra_no, 2,7);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"),
-                             pub_data_stru->route_msg_type, transLog.acq_date, 2,9);
+                             DB_MSG_TYPE, transLog.acq_date, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                             pub_data_stru->route_msg_type, transLog.acq_term_id1, 2,17);
+                             DB_MSG_TYPE, transLog.acq_term_id1, 2,17);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
-                             pub_data_stru->route_msg_type, transLog.acq_term_id2, 2,17);
+                             DB_MSG_TYPE, transLog.acq_term_id2, 2,17);
         if(0 >= select_translog(&transLog)) return -1;
         if(transLog.permit_void[0] == '1') {
             pub_data_stru->timeout_table.flag[0]  = '2';
@@ -2368,17 +2368,17 @@ int result_query_tl(glob_msg_stru * pub_data_stru) {
                                pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp));
         if(i > 0) memcpy(log.qs_date,tmp,4);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"),
-                             pub_data_stru->route_msg_type, log.sys_date      , 2,9);
+                             DB_MSG_TYPE, log.sys_date      , 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                             pub_data_stru->route_msg_type, log.acq_insti_code, 2,9);
+                             DB_MSG_TYPE, log.acq_insti_code, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"),
-                             pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7);
+                             DB_MSG_TYPE, log.acq_tra_no    , 2,7);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"),
-                             pub_data_stru->route_msg_type, log.acq_date      , 2,9);
+                             DB_MSG_TYPE, log.acq_date      , 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                             pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id1  , 2,17);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
-                             pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id2  , 2,17);
         if(0>update_db_result_pay(&log,  ret_code)) {
             if(0 < pub_data_stru->timeout_table.num--) {
                 pub_data_stru->timeout_table.invalid_time = time(NULL)+(30-pub_data_stru->timeout_table.num)*SYS_TIME_OUT;
@@ -2424,17 +2424,17 @@ int result_query_hnyl(glob_msg_stru * pub_data_stru) {
                                pub_data_stru->in_msg_type, tmp,0 ,sizeof(tmp));
         if(i > 0) memcpy(log.qs_date,tmp,4);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "SYS_DATE"),
-                             pub_data_stru->route_msg_type, log.sys_date      , 2,9);
+                             DB_MSG_TYPE, log.sys_date      , 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
-                             pub_data_stru->route_msg_type, log.acq_insti_code, 2,9);
+                             DB_MSG_TYPE, log.acq_insti_code, 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TRA_NO"),
-                             pub_data_stru->route_msg_type, log.acq_tra_no    , 2,7);
+                             DB_MSG_TYPE, log.acq_tra_no    , 2,7);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_DATE"),
-                             pub_data_stru->route_msg_type, log.acq_date      , 2,9);
+                             DB_MSG_TYPE, log.acq_date      , 2,9);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                             pub_data_stru->route_msg_type, log.acq_term_id1  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id1  , 2,17);
         _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID2"),
-                             pub_data_stru->route_msg_type, log.acq_term_id2  , 2,17);
+                             DB_MSG_TYPE, log.acq_term_id2  , 2,17);
         if(0>update_db_result_pay(&log,  ret_code)) {
             if(0 < pub_data_stru->timeout_table.num--) {
                 pub_data_stru->timeout_table.invalid_time = time(NULL)+(30-pub_data_stru->timeout_table.num)*SYS_TIME_OUT;

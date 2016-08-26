@@ -961,7 +961,7 @@ int get_default(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         return -1;
     }
     rtrim(data);
-    add_pub_field(pub_data_stru, fldid, pub_data_stru->in_msg_type, strlen(data), data, 1);
+    add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type, strlen(data), data, 1);
     return 1;
 }
 
