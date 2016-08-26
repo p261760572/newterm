@@ -228,7 +228,7 @@ struct DB_PROC{
 };
 struct INSTI_CODE_PROC {
 	char *msg_type;
-	int (*func)(char *insti_code);
+	int (*func)(char * fold_name,char *insti_code,int size);
 };
 typedef struct{
 	char *handle;

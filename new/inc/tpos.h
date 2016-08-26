@@ -96,4 +96,6 @@ int _tpos_get_smkey(char *sek_indx,char *tek_indx,char *tm_key,char *key1,char *
 /*非重构型组件*/
 int tpos_count_trans(glob_msg_stru *pub_data_stru, char *psam,char *settle_time);
 /***/
+int select_old_tpos_log(tl_trans_log_def *pTransLog);
+
 #endif

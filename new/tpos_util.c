@@ -2517,6 +2517,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                             len += fieldLen;
                             break;
                         case 907: //终端流水号
+                        case 916: //转入账号
                             fieldLen = get_field_data_safe(pub_data_stru,atoi(p),
                                                            DB_MSG_TYPE, fieldVal,sizeof(fieldVal));
                             if(fieldLen <=0) break;
