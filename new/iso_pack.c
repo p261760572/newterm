@@ -73,6 +73,7 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
             asc_to_bcd((unsigned char *)tmp1, (unsigned char *)tmp ,len,0);
             if(offset + (p_fld_def->max_len+1)/2 > size)
                 return -1;
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,(p_fld_def->max_len+1)/2);
             memcpy(buf+offset,tmp1,(p_fld_def->max_len+1)/2);
             offset = offset + (p_fld_def->max_len+1)/2;
             if(buf[0]==0x60) {
@@ -85,6 +86,7 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
         } else {
             if(offset + p_fld_def->max_len > size)
                 return -1;
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,p_fld_def->max_len);
             memcpy(buf+offset, tmp ,p_fld_def->max_len);
             offset = offset + p_fld_def->max_len;
             if(buf[0]==0x60) {
@@ -126,11 +128,13 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
 
         asc_to_bcd((unsigned char *)tmp1, (unsigned char *)tmp,
                    p_fld_def->max_len, 0);
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,(p_fld_def->max_len+1)/2);
         memcpy(buf + offset, tmp1, (p_fld_def->max_len+1)/2);
         offset += (p_fld_def->max_len+1)/2;
     } else {
         if(offset + p_fld_def->max_len > size)
             return -1;
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,p_fld_def->max_len);
         memcpy(buf + offset, tmp, p_fld_def->max_len);
         offset += p_fld_def->max_len;
         disp_len += snprintf(disp_buf+disp_len,sizeof(disp_buf)-disp_len,
@@ -216,12 +220,14 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
         }
         if(p_fld_def->is_compress) {
             asc_to_bcd((unsigned char *)tmp1, (unsigned char *)tmp, len, p_fld_def->is_compress-1);
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,(len+1)/2);
             memcpy(data+len2,tmp1,(len+1)/2);
             len2=len2+(len+1)/2;
 
             disp_len += snprintf(disp_buf+disp_len,sizeof(disp_buf)-disp_len,
                                  "field[%s]=[%d][%s]\n",p_fld_def->name,(len+1)/2,tmp);
         } else {
+        	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len);
             memcpy(data+len2, tmp, len);
             len2 = len2 + len;
             disp_len += snprintf(disp_buf+disp_len,sizeof(disp_buf)-disp_len,
@@ -230,6 +236,7 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
     }
     if(bitnum == 16) bitmap[0] |= 0x80;
     if(bitmap_flag) {
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,bitnum);
         memcpy(buf + offset, bitmap, bitnum);
         offset += bitnum;
     } else {
@@ -238,6 +245,7 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
         offset += bitnum * 2;
     }
 
+	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len2);
     memcpy(buf + offset, data, len2);
     offset += len2;
     if(macLen > 0) {
@@ -246,6 +254,7 @@ int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
             dcs_log(0, 0, "<%s>¼ÆËãMAC³ö´í",__FUNCTION__);
             return -1;
         }
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,macLen);
         memcpy(buf + offset - macLen, tmp, macLen);
     }
     if(head_flag)

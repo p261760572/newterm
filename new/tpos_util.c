@@ -37,6 +37,7 @@ int tpos_check_mac(glob_msg_stru * pub_data_stru) {
     memset(tmp,0,sizeof(tmp));
     if(pub_data_stru->in_cry_flag) {
         assert((pub_data_stru->src_len-16-len-1)<= sizeof(tmp));
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->src_len-16-len-1);
         memcpy(tmp,pub_data_stru->src_buffer+len,pub_data_stru->src_len-16-len-1);
         p=(unsigned char *)pub_data_stru->src_buffer+len;
         /*
@@ -48,6 +49,7 @@ int tpos_check_mac(glob_msg_stru * pub_data_stru) {
         n=pub_data_stru->src_len-16-len-1;
     } else {
         assert((pub_data_stru->src_len-8-len-1) <= sizeof(tmp));
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->src_len-8-len-1);
         memcpy(tmp,pub_data_stru->src_buffer+len,pub_data_stru->src_len-8-len-1);
         p=(unsigned char *)pub_data_stru->src_buffer+len;
         /*
@@ -642,6 +644,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                 rtrim(node_info.title);
                 tmp[n]=strlen(node_info.title);
                 n++;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(node_info.title));
                 memcpy(tmp+n,node_info.title,strlen(node_info.title));
                 n=n+strlen(node_info.title);
             } else {
@@ -718,6 +721,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                             tmp1[0][s[0]]=strlen(str1);   //显示数据每条的长度1字节
                             s[0]++;
                             n++;
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str1));
                             memcpy(tmp1[0]+s[0],str1,strlen(str1));
                             n=n+strlen(str1);
                             s[0]=s[0]+strlen(str1);
@@ -782,6 +786,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                             tmp1[1][s[1]]=strlen(str1);   //显示数据每条的长度1字节
                             s[1]++;
                             n++;
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str1));
                             memcpy(tmp1[1]+s[1],str1,strlen(str1));
                             n=n+strlen(str1);
                             s[1]=s[1]+strlen(str1);
@@ -807,6 +812,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                 tmp1[2][s[2]]=para_info.id;
                 s[2]++;
                 n++;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(para_info.detail));
                 memcpy(tmp1[2],para_info.detail,strlen(para_info.detail));
                 s[2]=strlen(para_info.detail);
                 n=n+strlen(para_info.detail);
@@ -828,6 +834,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                 tmp1[3][s[3]]=strlen(para_info.detail);   //打印数据每条的长度1字节
                 s[3]++;
                 n++;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(para_info.detail));
                 memcpy(tmp1[3]+s[3],para_info.detail,strlen(para_info.detail));
                 s[3]=s[3]+strlen(para_info.detail);
                 n=n+strlen(para_info.detail);
@@ -890,6 +897,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                             tmp1[4][s[4]]=strlen(str);   //每条的长度1字节
                             s[4]++;
                             n++;
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                             memcpy(tmp1[4]+s[4],str,strlen(str));
                             n=n+strlen(str);
                             s[4]=s[4]+strlen(str);
@@ -947,6 +955,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                         tmp1[5][s[5]]=strlen(str);
                         s[5]++;
                         n++;
+						dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                         memcpy(tmp1[5]+s[5],str,strlen(str));
                         n=n+strlen(str);
                         s[5]=s[5]+strlen(str);
@@ -959,6 +968,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                         tmp1[5][s[5]]=strlen(str);
                         s[5]++;
                         n++;
+						dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                         memcpy(tmp1[5]+s[5],str,strlen(str));
                         n=n+strlen(str);
                         s[5]=s[5]+strlen(str);
@@ -1182,6 +1192,7 @@ int tpos_download_para(glob_msg_stru * pub_data_stru) {
                 rtrim(node_info.title);
                 tmp[n]=strlen(node_info.title);
                 n++;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(node_info.title));
                 memcpy(tmp+n,node_info.title,strlen(node_info.title));
                 n=n+strlen(node_info.title);
             } else {
@@ -1522,6 +1533,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                 rtrim(node_info.title);
                 tmp[0][s[0]]=strlen(node_info.title);
                 s[0]++;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(node_info.title));
                 memcpy(tmp[0]+s[0],node_info.title,strlen(node_info.title));
                 s[0]=s[0]+strlen(node_info.title);
             } else {
@@ -1565,7 +1577,8 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                         tmp[1][s[1]]=strlen(str1);   //显示数据每条的长度1字节
                         s[1]++;
 
-                        memcpy(tmp[1]+s[1],str1,strlen(str1));
+						dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str1));
+						memcpy(tmp[1]+s[1],str1,strlen(str1));
                         s[1]=s[1]+strlen(str1);
                         f--;
                         if(f >0) {
@@ -1622,6 +1635,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                         tmp[2][s[2]]=strlen(str1);   //显示数据每条的长度1字节
                         s[2]++;
 
+						dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str1));
                         memcpy(tmp[2]+s[2],str1,strlen(str1));
                         s[2]=s[2]+strlen(str1);
                         f--;
@@ -1666,6 +1680,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
             tmp[4][s[4]]=strlen(para_info.detail);   //打印数据每条的长度1字节
             s[4]++;
 
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(para_info.detail));
             memcpy(tmp[4]+s[4],para_info.detail,strlen(para_info.detail));
             s[4]=s[4]+strlen(para_info.detail);
             l[4]++;
@@ -1711,6 +1726,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                         if(para_info.id==3) {
                             tmp[5][s[5]]=strlen(str);   //显示数据每条的长度1字节
                             s[5]++;
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                             memcpy(tmp[5]+s[5],str,strlen(str));
                             s[5]=s[5]+strlen(str);
                         } else {
@@ -1762,6 +1778,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                     }
                     tmp[6][s[6]]=strlen(str);
                     s[6]++;
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                     memcpy(tmp[6]+s[6],str,strlen(str));
                     s[6]=s[6]+strlen(str);
                     p1=my_split(p1,',',str,sizeof(str));
@@ -1771,6 +1788,7 @@ int get_last_part_para(glob_msg_stru *pub_data_stru,const char *psam,char *menu_
                     }
                     tmp[6][s[6]]=strlen(str);
                     s[6]++;
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(str));
                     memcpy(tmp[6]+s[6],str,strlen(str));
                     n=n+strlen(str);
                     s[6]=s[6]+strlen(str);
@@ -1902,6 +1920,7 @@ int tpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
                               strlen(tmp), tmp, 1);
                 dcs_debug(0,0,"<%s>card_no=[%s]",__FUNCTION__,tmp);
                 if((outlen*2-48) >0) {
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,outlen*2-48);
                     memcpy(tmp,tmp1+48,outlen*2-48);
                     tmp[outlen*2-48]=0x00;
                     rtrim_c(tmp,'F');
@@ -2425,6 +2444,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     }
                     dcs_log(0, 0, "<%s>打印信息[%s]-[%d]+[%d]！",
                             __FUNCTION__,terminfo.name, len, fieldLen);
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                     memcpy(fmtMsgBuf + len, terminfo.name, fieldLen);
                     len += fieldLen;
                     p=p+3;
@@ -2452,6 +2472,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                             __FUNCTION__,para, len, fieldLen);
                                     return -1;
                                 }
+								dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                                 memcpy(fmtMsgBuf + len, tmpbuf, fieldLen);
                                 len += fieldLen;
                             }
@@ -2513,6 +2534,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,para, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, tmpbuf, fieldLen);
                             len += fieldLen;
                             break;
@@ -2527,6 +2549,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,para, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
                             len += fieldLen;
                             break;
@@ -2543,6 +2566,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                             if(memcmp(fieldVal+2+1+1+7+1,"NM",2)==0) {
                                 fieldVal[2+1+1+7+1+30]=0x00;
                                 rtrim(fieldVal+2+1+1+7+1);
+								dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                                 memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
                                 len += fieldLen;
                             }
@@ -2557,6 +2581,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,para, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
                             len += fieldLen;
                             break;
@@ -2791,6 +2816,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,p, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, tmpbuf, fieldLen);
                             len += fieldLen;
                             break;
@@ -2811,6 +2837,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,p, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, tmpbuf, fieldLen);
                             len += fieldLen;
                             break;
@@ -2828,6 +2855,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,p, len, fieldLen);
                                 return -1;
                             }
+							dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, tmpbuf, fieldLen);
                             len += fieldLen;
                             break;
@@ -2841,7 +2869,7 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                         __FUNCTION__,para, len, fieldLen);
                                 return -1;
                             }
-                    
+                    		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
                             memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
                             len += fieldLen;
                             break;
@@ -3009,6 +3037,7 @@ int format_echo_input(char *para, short fldid, glob_msg_stru *pub_data_stru) {
             } else if(flag == 1) {
                 if(tmp[0] == '0') { //无需格式化
                     fieldVal[   fldLen++]=strlen(tmp+1);
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
                     memcpy(fieldVal+fldLen,tmp+1,strlen(tmp+1));
                     fldLen +=strlen(tmp+1);
                     dcs_debug(fieldVal,fldLen,"<%s> 固定数据显示 ",__FUNCTION__);

@@ -217,6 +217,7 @@ int DoTimeOutRecode(timeout_stru *p_rec) {
     sLen -= sizeof(p_rec->remark);
     rtrim(p_rec->remark);
     sLen += strlen(p_rec->remark) + 1;
+	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
     memcpy(caSendBuf + 8, p_rec, sLen);
     rtrim(p_rec->foldname);
     iDestFolderId= fold_locate_folder(p_rec->foldname);

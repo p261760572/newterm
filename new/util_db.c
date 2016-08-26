@@ -152,6 +152,7 @@ int AnalyzeAddiData(glob_msg_stru * pub_data_stru, char *buff) {
         tFieldID[3] = 0;
         fieldID = HexToDec(tFieldID);
         if(fieldID < 0)break;
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,lLen);
         memcpy(tmpBuf, p, lLen);
         p += lLen;
         tmpBuf[lLen] = 0;
@@ -159,10 +160,12 @@ int AnalyzeAddiData(glob_msg_stru * pub_data_stru, char *buff) {
         if(fieldLen > 512)break;
         if(p - buff > dLen - fieldLen) {
             memset(fldVal, ' ', fieldLen);
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,dLen - (p - buff));
             memcpy(fldVal, p, dLen - (p - buff));
             fldVal[fieldLen] = 0;
         } else {
 //          memset(fldVal, 0, sizeof(fldVal));
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,fieldLen);
             memcpy(fldVal, p, fieldLen);
             fldVal[fieldLen] = 0;
         }
@@ -233,6 +236,7 @@ int GetFieldData(char *buff, int field_id, char *field_buf, int size, int flag) 
 	} else if(field_len >= size){
 		//error
 	} else {
+		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,field_len);
 		memcpy(field_buf, buff+i+FLS+FDLS, field_len);
 		field_buf[field_len] = '\0';
 		return field_len;

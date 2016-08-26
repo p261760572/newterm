@@ -159,6 +159,7 @@ int tpos_add_result_disp(glob_msg_stru *pub_data_stru) {
     else
         tmp[1]= get_delay_time(pub_data_stru->route_trans_type);
     snprintf(tmp+2,sizeof(tmp)-2,"%-3.3s",tmp1);
+	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
     memcpy(tmp+5,disp,i);
     tmp[5+i]=0x00;
     if(0> add_pub_field(pub_data_stru,
@@ -669,6 +670,7 @@ int get_ic_data(char *buf, int bSize, char *node_set, int *cnt) { //取IC数据，用
             if(bSize - len > l + 3) {
                 *buf++ = l>>8;
                 *buf++ = l & 0xff;
+				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
                 memcpy(buf, tmpbuf, l);
                 buf += l;
                 len += l + 4;
@@ -1058,6 +1060,7 @@ int get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para_step
         if(bSize - len > l + 3) {
             *buf++ = l>>8;
             *buf++ = l & 0xff;
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
             memcpy(buf, tmpbuf, l);
             buf += l;
             len += l + 4;
@@ -1216,6 +1219,7 @@ int get_pubkey_data_sm(char *buf, int bSize, char *node_set, int *last_ic_para_s
         if(bSize - len > l + 3) {
             *buf++ = l>>8;
             *buf++ = l & 0xff;
+			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
             memcpy(buf, tmpbuf, l);
             buf += l;
             len += l + 4;

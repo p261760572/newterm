@@ -214,7 +214,7 @@ UPDATE_DB_DEF gl_update_db[]= {
     {"UPDATE_DB_PAY_APP", update_db_pay_app, update_db_pay_ret},
     {"UPDATE_DB_APP_RET", update_db_app_ret, update_db_app_ret},
     {"UPDATE_DB_APP_PAY", update_db_app_pay, update_db_app_ret},
-    {NULL, NULL}
+    {NULL, NULL, NULL}
 };
 struct HEAD_PROC gl_head_proc[]= { // iso打包结束时对包头的特殊处理
     {"TL_HEAD_PROC", iso_tl_head_proc},

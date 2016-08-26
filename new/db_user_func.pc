@@ -284,6 +284,7 @@ int fdc_notify(char *para, char *inst_code,glob_msg_stru *pub_data_stru) {
     memcpy(pub_data_stru->timeout_table.remark,inst_code,8);
     sLen += strlen(pub_data_stru->timeout_table.remark) + 1;
     pub_data_stru->timeout_table.flag[0]='6';
+	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
     memcpy(buf +8, (char*)&(pub_data_stru->timeout_table), sLen);
 
     if(fold_write(myFid, myFid, buf, sLen + 8)<0) {

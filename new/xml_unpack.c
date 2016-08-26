@@ -85,6 +85,7 @@ int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int 
                         dcs_log(0,0,"<%s> mark too long! len=[%d][%s]",__FUNCTION__,len,tmp);
                         return -1;
                     }
+					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len-2);
                     memcpy(curr_mark,tmp+1,len-2);
                     curr_mark[len-2]=0x00;
                     dcs_debug(0,0,"new mark [%s]\n",curr_mark);
