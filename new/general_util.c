@@ -14,7 +14,7 @@
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
-#define _ATOI(a, b, c) {char _tmp[10]; memcpy(_tmp, a, b); c=atoi(_tmp);}
+#define _ATOI(a, b, c) {char _tmp[10]; bzero(_tmp, sizeof(_tmp)); memcpy(_tmp, a, b); c=atoi(_tmp);}
 
 int my_substring(char *buf, int buf_len, char type, int start, int end, 
 									char *data_out, int size, void (*func)(char *)) { 		
