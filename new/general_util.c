@@ -30,7 +30,7 @@ int my_substring(char *buf, int buf_len, char type, int start, int end,
 		if(end < start) end = buf_len;
 		
 		n = MIN(size-1, end-start);
-		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
+		//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
 		memcpy(data_out, buf+start, n);
 		data_out[n] = '\0';
 		if(n>0 && func) 
@@ -52,7 +52,7 @@ int my_separate(char *buf, int buf_len, const char div, int start, int end,
         		if(count >= start) {
 				 	      n = MIN(size-1-len, p-s); 				
 				 	      if(n <= 0) break;
-				    dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
+				    //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
 		            memcpy(data_out+len, s, n);
 		            len += n;
           	}
@@ -225,7 +225,7 @@ int add_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,
                         return -1;
                     }
                     if(pub_data_stru->data_rec[i].len <2048) {
-						dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->data_rec[i].len);
+						//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->data_rec[i].len);
                         memcpy(caBuf,pub_data_stru->data_rec[i].data_addr,pub_data_stru->data_rec[i].len);
                     } else {
                         dcs_log(0,0,"<%s> data_len[%d] limited",
@@ -234,7 +234,7 @@ int add_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,
                     }
                     pub_data_stru->data_rec[i].data_addr= pub_data_stru->buffer+pub_data_stru->off_set;
                     pub_data_stru->off_set= pub_data_stru->off_set+pub_data_stru->data_rec[i].len;
-					dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->data_rec[i].len);
+					//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->data_rec[i].len);
                     memcpy(pub_data_stru->data_rec[i].data_addr,caBuf,pub_data_stru->data_rec[i].len);
                 }
                 pub_data_stru->buffer[pub_data_stru->off_set]=0x00;
@@ -263,7 +263,7 @@ int add_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,
         pub_data_stru->data_rec[i].data_addr=pub_data_stru->buffer+pub_data_stru->off_set;
     pub_data_stru->data_rec[i].Off=1;
     pub_data_stru->data_rec[i].from=from;
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,data_len);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,data_len);
     memcpy(pub_data_stru->data_rec[i].data_addr+pub_data_stru->data_rec[i].len,data,data_len);
     memcpy(pub_data_stru->data_rec[i].msg_type, msg_type, 4); //2016/7/20 星期三 下午 4:54:48 data_rec.msg_type
     pub_data_stru->data_rec[i].len=pub_data_stru->data_rec[i].len+data_len;
@@ -316,7 +316,7 @@ int update_pub_field(glob_msg_stru * pub_data_stru,short id,
     if(k ==1)
         pub_data_stru->data_rec[i].data_addr=pub_data_stru->buffer+pub_data_stru->off_set;
 
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,data_len);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,data_len);
     memcpy(pub_data_stru->data_rec[i].data_addr,data,data_len);
     pub_data_stru->data_rec[i].len=data_len;
     if(k == 1)
@@ -358,7 +358,7 @@ int get_field_data_safe(glob_msg_stru *pub_data_stru,int field_id,
         if(field_id == pub_data_stru->data_rec[i].field_id &&
            memcmp(msg_type, pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off) {
-            dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,MIN(pub_data_stru->data_rec[i].len,size-1));
+            //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,MIN(pub_data_stru->data_rec[i].len,size-1));
             memcpy(data,pub_data_stru->data_rec[i].data_addr,
                    MIN(pub_data_stru->data_rec[i].len,size-1));
             data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
@@ -377,7 +377,7 @@ int _get_field_data_safe(glob_msg_stru *pub_data_stru,short field_id,
            memcmp(msg_type,pub_data_stru->data_rec[i].msg_type,4)==0 &&
            pub_data_stru->data_rec[i].Off &&
            pub_data_stru->data_rec[i].from== flag) {
-            dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,MIN(pub_data_stru->data_rec[i].len,size-1));
+            //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,MIN(pub_data_stru->data_rec[i].len,size-1));
             memcpy(data,pub_data_stru->data_rec[i].data_addr,
                    MIN(pub_data_stru->data_rec[i].len,size-1));
             data[MIN(pub_data_stru->data_rec[i].len,size-1)]=0x00;
@@ -496,7 +496,7 @@ char *my_split(char *s1, const char s2,char *s3, int size_s3) {
         p++;
     }
 
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,size_s3-1);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,size_s3-1);
     memcpy(s3,s1,MIN(p-s1, size_s3-1));
     s3[MIN(p-s1, size_s3-1)]=0x00;
     if(*p)
@@ -870,7 +870,7 @@ int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                 return -1;
             }
             _ATOI(p+6, 2, i);								// 获取字段长度
-            dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+            //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
             memcpy(fieldName, p+8, i);			// 获取字段名称
             fieldName[i] = 0;
             fieldLen = _get_field_data_safe(pub_data_stru,get_pub_field_id(msgtype, fieldName),
@@ -1011,7 +1011,7 @@ int get_db_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     for(p =my_split(para,',',tmp,sizeof(tmp)); p ; p=my_split(p,',',tmp,sizeof(tmp))) {
         if(p && tmp[0] == '#' && strlen(tmp)>1) {
 //          p++;
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
             memcpy(tmpBuf+fieldLen,tmp+1,strlen(tmp+1));
             fieldLen +=strlen(tmp+1);
             tmpBuf[fieldLen]=0x00;
@@ -1019,7 +1019,7 @@ int get_db_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru) {
             i=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, tmp),
                                   DB_MSG_TYPE,fieldVal,sizeof(fieldVal));
             if(i > 0 && (i+fieldLen) <1024) {
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
                 memcpy(tmpBuf+fieldLen,fieldVal,i);
                 fieldLen +=i;
                 tmpBuf[fieldLen]=0x00;
@@ -1293,7 +1293,7 @@ int write_voidtrans_to_fold(timeout_stru *table) {
     sLen -= sizeof(table->remark);
     rtrim(table->remark);
     sLen += strlen(table->remark) + 1;
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
     memcpy(buf + 8, (char*)table, sLen);
     dcs_debug(0,0,"<%s> flag=%s",__FUNCTION__,table->flag);
     if(fold_write(myFid, myFid, buf, sLen + 8)<0) {
@@ -1481,7 +1481,7 @@ int get_msg_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     for(p =my_split(para,',',tmp,sizeof(tmp)); p ; p=my_split(p,',',tmp,sizeof(tmp))) {
         if(p && tmp[0] == '#' && strlen(tmp)>1) {
 //          p++;
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
             memcpy(tmpBuf+fieldLen,tmp+1,strlen(tmp+1));
             fieldLen +=strlen(tmp+1);
             tmpBuf[fieldLen]=0x00;
@@ -1490,7 +1490,7 @@ int get_msg_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                   pub_data_stru->in_msg_type,
                                   fieldVal,sizeof(fieldVal));
             if(i > 0 && (i+fieldLen) <1024) {
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
                 memcpy(tmpBuf+fieldLen,fieldVal,i);
                 fieldLen +=i;
                 tmpBuf[fieldLen]=0x00;
@@ -1527,7 +1527,7 @@ int get_msg_data_tlvfill(char *para, short fldid, glob_msg_stru *pub_data_stru) 
 
     for(p =my_split(para,',',tmp,sizeof(tmp)); p ; p=my_split(p,',',tmp,sizeof(tmp))) {
         if(p && tmp[0] == '#' && strlen(tmp)>1) {
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
             memcpy(tmpBuf+fieldLen,tmp+1,strlen(tmp+1));
             fieldLen +=strlen(tmp+1);
             tmpBuf[fieldLen]=0x00;
@@ -1537,7 +1537,7 @@ int get_msg_data_tlvfill(char *para, short fldid, glob_msg_stru *pub_data_stru) 
             if(i > 0 && (i+fieldLen) <1024) {
                 sprintf(tmpBuf+fieldLen,"%03d",i);
                 fieldLen +=3;
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
                 memcpy(tmpBuf+fieldLen,fieldVal,i);
                 fieldLen +=i;
                 tmpBuf[fieldLen]=0x00;
@@ -1549,7 +1549,7 @@ int get_msg_data_tlvfill(char *para, short fldid, glob_msg_stru *pub_data_stru) 
             if(i > 0 && (i+fieldLen) <1024) {
                 sprintf(tmpBuf+fieldLen,"%03d",i);
                 fieldLen +=3;
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
                 memcpy(tmpBuf+fieldLen,fieldVal,i);
                 fieldLen +=i;
                 tmpBuf[fieldLen]=0x00;
@@ -1571,7 +1571,7 @@ int get_data_standard(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     dcs_debug(0,0,"<%s> begin",__FUNCTION__);
     for(p =my_split(para,',',tmp,sizeof(tmp)); p ; p=my_split(p,',',tmp,sizeof(tmp))) {
         if(p && tmp[0] == '#' && strlen(tmp)>1) {
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,strlen(tmp+1));
             memcpy(tmpBuf+fieldLen,tmp+1,strlen(tmp+1));
             fieldLen +=strlen(tmp+1);
             tmpBuf[fieldLen]=0x00;
@@ -1579,7 +1579,7 @@ int get_data_standard(char *para, short fldid, glob_msg_stru *pub_data_stru) {
             i=get_field_data_safe(pub_data_stru,atoi(tmp), pub_data_stru->in_msg_type,
                                   fieldVal,sizeof(fieldVal));
             if(i > 0 && (i+fieldLen) <1024) {
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
                 memcpy(tmpBuf+fieldLen,fieldVal,i);
                 fieldLen +=i;
                 tmpBuf[fieldLen]=0x00;
@@ -1789,7 +1789,7 @@ int tag(unsigned char *icBuf, int len) {
                 i += TAG[j].fieldLen;
                 TAG[j].datalen = *p++;
                 i++;
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,TAG[j].datalen);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,TAG[j].datalen);
                 memcpy(TAG[j].data, p, TAG[j].datalen);
                 p +=  TAG[j].datalen;
                 i += TAG[j].datalen;

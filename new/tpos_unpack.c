@@ -78,7 +78,7 @@ int tpos_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru) {
             dcs_log(0,0,"<%s> can not get <%s>",__FUNCTION__,op_name);
             return -1;
         }
-		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len);
+		//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len);
         memcpy(tmp_buf,src_buf+offset,len);
         offset = offset+len;
         src_len = src_len -len;
@@ -162,7 +162,7 @@ int get_oper_code(int num,char *src_buf,int src_len,char *code_buf,int max_buf) 
         else return -1;
     }
     if(i < max_buf && i<=src_len) {
-		dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
+		//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
         memcpy(code_buf,src_buf,i);
     }
     else return -1;

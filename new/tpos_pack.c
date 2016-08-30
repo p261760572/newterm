@@ -138,7 +138,7 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
         dcs_log(0,0,"<%s> out cache overflow! len2",__FUNCTION__);
         return -1;
     }
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len2);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len2);
     memcpy(buf+len1,tmp_buf1,len2);
     dcs_debug(0,0,"<%s>len1=%d,tmp_buf1[0]=%02x,len3=%d",
               __FUNCTION__,len1,tmp_buf1[0],len3);
@@ -149,7 +149,7 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
         dcs_log(0,0,"<%s> out cache overflow! len3",__FUNCTION__);
         return -1;
     }
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len3);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len3);
     memcpy(buf+len1,data_buf,len3);
     len1=len1+len3;
     buf[mark]=(len1-mark-2+8)/256;
@@ -160,7 +160,7 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
     dcs_debug(0,0,"<%s> mark=%d,len1=%d buf[mark]=%02x buf[mark+1]=%02x,cnt=%d",
               __FUNCTION__,mark,len1,(len1-mark-2)/256,(len1-mark-2)%256,cnt);
 // memset(data_buf,0,sizeof(data_buf));
-	dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len1-mark1-2);
+	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,len1-mark1-2);
     memcpy(data_buf,buf+mark1+2,len1-mark1-2);
     if(pub_data_stru->out_cry_flag) {
         if(((len1-mark1-2)%16)) {
@@ -271,7 +271,7 @@ int tpos_pub_to_priv(short id ,const char *msg_type,const field_define *p_def,
                             __FUNCTION__,n,size);
                     return -1;
                 }
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
                 memcpy(buf,tmp_buf,n);
                 n =p_def->d_max_len;
             }
@@ -303,7 +303,7 @@ int tpos_pub_to_priv(short id ,const char *msg_type,const field_define *p_def,
                         __FUNCTION__,n,size);
                 return -1;
             }
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
             memcpy(buf+1,tmp_buf,n);
             n =n+1;
         }
@@ -335,7 +335,7 @@ int tpos_pub_to_priv(short id ,const char *msg_type,const field_define *p_def,
                         __FUNCTION__,n,size-2);
                 return -1;
             }
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
             memcpy(buf+2,tmp_buf,n);
             n =n+2;
         }

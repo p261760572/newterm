@@ -232,7 +232,7 @@ int zpos_get_ic_data(char *buf, int bSize, char *node_set, int *cnt) { //È¡ICÊý¾
             if(bSize - len > l + 3) {
                 *buf++ = l>>8;
                 *buf++ = l & 0xff;
-				dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
+				//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
                 memcpy(buf, tmpbuf, l);
                 buf += l;
                 len += l + 4;
@@ -613,7 +613,7 @@ int zpos_get_pubkey_data(char *buf, int bSize, char *node_set, int *last_ic_para
         if(bSize - len > l + 3) {
             *buf++ = l>>8;
             *buf++ = l & 0xff;
-			dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
+			//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,l);
             memcpy(buf, tmpbuf, l);
             buf += l;
             len += l + 4;
