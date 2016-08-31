@@ -1290,9 +1290,9 @@ int write_voidtrans_to_fold(timeout_stru *table) {
     myFid = fold_locate_folder("APPL");
     memcpy(buf,"TIME0001", 8);
     sLen = sizeof(timeout_stru);
-    sLen -= sizeof(table->remark);
+   // sLen -= sizeof(table->remark);
     rtrim(table->remark);
-    sLen += strlen(table->remark) + 1;
+  //  sLen += strlen(table->remark) + 1;
 	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
     memcpy(buf + 8, (char*)table, sLen);
     dcs_debug(0,0,"<%s> flag=%s",__FUNCTION__,table->flag);

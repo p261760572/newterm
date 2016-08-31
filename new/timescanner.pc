@@ -214,9 +214,9 @@ int DoTimeOutRecode(timeout_stru *p_rec) {
     /*发送超时信息*/
     memcpy(caSendBuf,"TIME0001",8);   /*内部命令，超时*/
     sLen = sizeof(timeout_stru);
-    sLen -= sizeof(p_rec->remark);
+    //sLen -= sizeof(p_rec->remark);
     rtrim(p_rec->remark);
-    sLen += strlen(p_rec->remark) + 1;
+    //sLen += strlen(p_rec->remark) + 1;
 	//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,sLen);
     memcpy(caSendBuf + 8, p_rec, sLen);
     rtrim(p_rec->foldname);

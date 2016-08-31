@@ -116,11 +116,12 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
     if(0>load_db_trans_info(pub_data_stru))//获取原始交易数据
         return -1;
     c=pub_data_stru->timeout_table.flag[0];
+    
     switch(pub_data_stru->timeout_table.flag[0]) {
         case '1'://冲正并应答终端
             strcpy(pub_data_stru->center_result_code, CODE_TIME_OUT);
             pub_data_stru->timeout_table.flag[0]++;
-            insert_timeout_table(pub_data_stru, 2);
+            insert_timeout_table(pub_data_stru, 2); 
             _get_field_data_safe(pub_data_stru, get_pub_field_id(DB_MSG_TYPE, "ACQ_INSTI_CODE"),
                                  DB_MSG_TYPE,pub_data_stru->route_insti_code, 2,9);
             _get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TRANS_TYPE"),

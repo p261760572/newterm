@@ -2211,7 +2211,7 @@ int tpos_trans_cancle(char *para, short flag, glob_msg_stru *pub_data_stru) {
 
 //É¾³ý½ð¶îÅÐ¶¨ 20140926
 int tpos_reversed(glob_msg_stru * pub_data_stru) {
-    char tmp[64];
+    char tmp[64], mac[16+1];
     char fieldVal[30 + 1];
     struct  tm *time_tm;
     time_t time_cl;
@@ -2246,13 +2246,13 @@ int tpos_reversed(glob_msg_stru * pub_data_stru) {
                         pub_data_stru->in_msg_type,
                         tPosLog.acq_insti_code,9);
     bcd_to_asc((unsigned char *)tPosLog.acq_tra_no, (unsigned char *)fieldVal, 6, 0);
-    bcd_to_asc((unsigned char *)tmp, (unsigned char *)fieldVal + 3, 16, 0);
+    bcd_to_asc((unsigned char *)mac, (unsigned char *)fieldVal + 3, 16, 0);
     ret = select_translog(&tPosLog);
     if(ret < 0) {
         strcpy(pub_data_stru->center_result_code,"96");
         return 1;
     }
-    if(memcmp(tmp, tPosLog.acq_mac, 16)) ret = 0;
+    if(memcmp(mac, tPosLog.acq_mac, 16)) ret = 0;
     rtrim(tPosLog.resp_cd_rcv);
     if(ret == 1 && memcmp("00", tPosLog.resp_cd_rcv, 2)==0 &&
        tPosLog.void_flag[0] == '0' && tPosLog.permit_void[0] == '1') {
