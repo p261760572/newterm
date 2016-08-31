@@ -231,5 +231,6 @@ int empty_tmp_para( char *psam);
 int insti_gen_work_key(glob_msg_stru *pub_data_stru);
 int tc_send(char *para, short flag, glob_msg_stru *pub_data_stru);
 int end_trans_print(glob_msg_stru *pub_data_stru);
-
+int format_msg_data(char *data, int data_len, char *format, int len_start, 
+										int len_end, char *format_data, int size);
 #endif

@@ -30,7 +30,6 @@ int my_substring(char *buf, int buf_len, char type, int start, int end,
 		if(end < start) end = buf_len;
 		
 		n = MIN(size-1, end-start);
-		//dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
 		memcpy(data_out, buf+start, n);
 		data_out[n] = '\0';
 		if(n>0 && func) 
@@ -52,7 +51,6 @@ int my_separate(char *buf, int buf_len, const char div, int start, int end,
         		if(count >= start) {
 				 	      n = MIN(size-1-len, p-s); 				
 				 	      if(n <= 0) break;
-				    //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,n);
 		            memcpy(data_out+len, s, n);
 		            len += n;
           	}
@@ -68,11 +66,43 @@ int my_separate(char *buf, int buf_len, const char div, int start, int end,
 		return strlen(data_out);
 }
 
+int my_date_time(char *src_time, int src_len, int type, char *format_time, int size) {
+		struct tm *time_tm;
+		time_t time_cl;
+		int len = 0;
+		
+		if(src_len < 0) {
+				time(&time_cl) ;
+        time_tm = localtime(&time_cl);
+        if(strftime(src_time, 20, "%Y%m%d%H%M%S",time_tm) == 0) return -1;
+    }
+    if(type == 1) {
+		    memcpy(format_time + len, src_time, 4);
+		    len += 4;
+		    format_time[len++] = '-';
+		    memcpy(format_time + len, src_time + 4, 2);
+		    len += 2;
+		    format_time[len++] = '-';
+		    memcpy(format_time + len, src_time + 6, 2);
+		    len += 2;
+		    format_time[len++] = ' ';
+		    memcpy(format_time + len, src_time + 8, 2);
+		    len += 2;
+		    format_time[len++] = ':';
+		    memcpy(format_time + len, src_time + 10, 2);
+		    len += 2;
+		    format_time[len++] = ':';
+		    memcpy(format_time + len, src_time + 12, 2);
+		    len += 2;	
+		}
+    if(size < len) return -1;
+    return len;
+}
 
 int format_msg_data(char *data, int data_len, char *format, int len_start, 
 										int len_end, char *format_data, int size) {
 		if(!format || !format[0] ) return -1;
-		int format_len;
+		int format_len = 0;
 		char format_type, div;
 		
 		format_type = format[0];
@@ -90,6 +120,43 @@ int format_msg_data(char *data, int data_len, char *format, int len_start,
 		else if(format_type == '4') {									// 字符分割截取
 				div = format[1];
 				format_len = my_separate(data, data_len, div, len_start, len_end, format_data, size, NULL);
+		}
+		else if(format_type == '5') {									// 格式化卡号
+				strncpy(format_data, data, size-1);
+				format_data[size-1] = 0x0;
+				if(data_len > 10) memset(format_data + 6, '*', data_len - 10);
+				format_len = data_len;
+		}
+		else if(format_type == '6') {									// 格式化日期时间
+				format_len = my_date_time(data, data_len, 1, format_data, size);
+		}
+		else if(format_type == '7') {									// 格式化金额
+				if(data_len > 0) {
+            if(data[0] >= '0' && data[0] <= '9')
+                sprintf(format_data, "%.2f", atof(data)/100);
+            else if(data[0]=='C')	                
+                sprintf(format_data, "%.2f", atof(data+1)/100);
+            else if(data[0]=='D')
+                sprintf(format_data, "-%.2f", atof(data+1)/100);
+           	format_len = strlen(format_data);
+				}
+		}
+		else if(format_type == '7') {									// 格式化持卡人信息
+				if(data_len > 0) {
+            if(memcmp(data+2+1+1+7+1,"NM",2)==0) {
+            		strncpy(format_data, data, size-1);
+            		format_data[size-1] = 0x0;
+			          format_data[2+1+1+7+1+30]=0x00;
+			          rtrim(format_data+2+1+1+7+1);
+			          format_len = strlen(format_data);
+			      }
+				}
+		}
+		else if(format_type == '8') {									// 格式化余额显示
+				if(data_len > 0) {
+            sprintf(format_data, "%.2f", (data[27] == 'D' ? -1 : 1) * atof(data + 28)/100);
+            format_len = strlen(format_data);
+				}
 		}
 		return format_len ;
 }
@@ -833,7 +900,7 @@ int set_field_service_entry(char *para, short fldid, glob_msg_stru *pub_data_str
 **************************************************************/
 int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char fieldVal[256 + 1], *p, tmpBuf[1024 + 1];
-    char *p1, buf[10 + 1], fieldName[40 +1], *msgtype, flag;
+    char *p1, buf[10 + 1], fieldName[40 +1], *msgtype;
     int fieldLen, start, end, i, data_from, n;
     rtrim(para);
     memset(tmpBuf, 0, sizeof(tmpBuf));
@@ -854,7 +921,6 @@ int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                     data_from = 0;
                     break;
             }
-            flag = *p <= '2' ? 0 : 1;
             if(strlen(p) < 8) {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
