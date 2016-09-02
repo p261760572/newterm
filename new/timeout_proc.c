@@ -18,9 +18,12 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
     init_pub_data_stru(&pub_data_stru);
     pub_data_stru.src_buffer=src_buf;
     pub_data_stru.src_len=src_len;
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(memcmp(src_buf, "0001", 4) == 0) { //超时处理
         memcpy(&pub_data_stru.timeout_table, src_buf + 4, sizeof(timeout_stru));
+		dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
         ret = timeout_proc(&pub_data_stru);
+		dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
         if(0 == ret)
             return -1;
         if(0 > ret) {
@@ -28,6 +31,7 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
             return -1;
         }
     }
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(pub_data_stru.use_timeout) {    //判断是否插超时表
 //暂时用1
 
@@ -35,6 +39,7 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
             return -1;
         }
     }
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     *to_fid=fold_locate_folder(pub_data_stru.route_fold_name);
     if(*to_fid <0) {
         dcs_log(0,0,"<timeout_proc> fold_locate_folder error! route_fold_name=[%s]",pub_data_stru.route_fold_name);
@@ -58,7 +63,7 @@ int _update_db_voidflag(char *key,char flag) {
     tl_trans_log_def TransLog;
 
     memset(&TransLog,0,sizeof(tl_trans_log_def));
-    snprintf(msgkey,sizeof(msgkey),key);
+    snprintf(msgkey,sizeof(msgkey), "%s", key);
     rtrim(msgkey);
     dcs_debug(0,0,"<%s> msgkey=[%s]",__FUNCTION__,msgkey);
     p=my_split(msgkey, ',',tmp,sizeof(tmp));
@@ -113,8 +118,10 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
 //  dcs_log(0, 0, "<FILE:%s,LINE:%d>begin flag=%d", __FILE__, __LINE__,pub_data_stru->timeout_table.flag[0]);
     if(pub_data_stru->timeout_table.flag[0] == '0') return 0; //不处理
 //  dcs_log(0, 0, "<FILE:%s,LINE:%d>", __FILE__, __LINE__);
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(0>load_db_trans_info(pub_data_stru))//获取原始交易数据
         return -1;
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     c=pub_data_stru->timeout_table.flag[0];
     
     switch(pub_data_stru->timeout_table.flag[0]) {
@@ -169,15 +176,17 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
             break;
 
     }
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(0 > timeout_handle(pub_data_stru)) return -1;
     if(0>get_route_insti_info(pub_data_stru)) { //获取路由机构信息
         return -1;
     }
-    dcs_debug(0,0,"<%s> route insti=[%s]",__FUNCTION__,pub_data_stru->route_insti_code);
+	dcs_debug(0,0,"at %s(%s:%d) route_insti_code=[%s]",__FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_insti_code);
     if(0>conver_data(pub_data_stru, 2)) { //数据格式转换
         dcs_log(0, 0, "<FILE:%s,LINE:%d>域转换失败！", __FILE__, __LINE__, pub_data_stru->timeout_table.flag);
         return -1;
     }
+	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(saveflag) {
         db_update(pub_data_stru, 0);
     }
