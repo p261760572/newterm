@@ -2318,7 +2318,7 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char fmtMsgBuf[512 + 1], prtCtl[4], templetIndex[3], msgbuf[200], tmpbuf[100], fieldVal[512+1];
     char advert_head[200],advert_inf[200],advert_tail[200],tmp[256];
     char *p,*p1,*msgtype;
-    int len, i,  fieldLen, start, end;
+    int len, i,  fieldLen, start, end, format_len=0;
     time_t time_cl ;
     struct tm *time_tm;
     struct TPOS_TERM_INFO terminfo;
@@ -2475,19 +2475,29 @@ int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                                            fieldVal,sizeof(fieldVal));
                 }
                 if(*p && *p == '?') {						// 数据域格式化
+                		p++;
                 		if(*p =='1' || *p == '3') {					// 字符串截取
 				                _ATOI(p+1, 2, start);						// 获取开始位置
 				                _ATOI(p+3, 2, end);							// 获取结束位置
+				                format_len = 1+2+2;
 				            } else if(*p =='2' || *p == '4') {	//字符串分割
 				            		_ATOI(p+2, 3, start);							// 获取开始位置
 				            		end = start;
+				            		format_len = 2+3;
+				            } 
+				            else {
+				            		format_len = 1;
 				            }
 				            fieldLen = format_msg_data(fieldVal, fieldLen, p, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
-					       		len += fieldLen;
-                } else {
+					       		p += format_len;
+                } else if(fieldLen > 0){
+                		if(len+fieldLen > 512) {
+						            dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
+						            return -1;
+						        }
                 		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
-                    len += fieldLen;
                 }
+                len += (fieldLen < 0? 0:fieldLen);
             } else if(*p == '\\') {
                 memcpy(msgbuf, p + 1, 2);
                 asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)msgbuf, 2, 1);
@@ -2665,7 +2675,7 @@ int electricity_payment_48(char *para, short fldid, glob_msg_stru *pub_data_stru
 */
 int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char fieldVal[256 + 1], *p,*p1,tmp[512],fmtMsgBuf[512 + 1],tmpbuf[100],*msgtype;
-    int len,fieldLen, start, end;
+    int len,fieldLen, start=0, end=0, format_len =0;
 
     dcs_debug(0,0,"<%s> begin",__FUNCTION__);
     if(memcmp("00000", pub_data_stru->center_result_code,
@@ -2719,19 +2729,28 @@ int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                                msgtype,
                                                fieldVal,sizeof(fieldVal));
                 if(*p && *p == '?') {						// 数据域格式化
+                		p++;
                 		if(*p =='1' || *p == '3') {					// 字符串截取
 				                _ATOI(p+1, 2, start);						// 获取开始位置
 				                _ATOI(p+3, 2, end);							// 获取结束位置
+				                format_len = 1+2+2;
 				            } else if(*p =='2' || *p == '4') {	//字符串分割
 				            		_ATOI(p+2, 3, start);							// 获取开始位置
 				            		end = start;
+				            		format_len = 2+3;
+				            } else {
+				            		format_len = 1;
 				            }
 				            fieldLen = format_msg_data(fieldVal, fieldLen, p, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
-					       		len += fieldLen;
-                } else {
+				            p += format_len;
+                } else if(fieldLen > 0) {
+                		if(len+fieldLen > 512) {
+						            dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
+						            return -1;
+						        }
                 		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
-                    len += fieldLen;
                 }
+                len += (fieldLen < 0? 0:fieldLen);
             } else if(*p == '\\') {
                 memcpy(tmpbuf, p + 1, 2);
                 asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmpbuf, 2, 1);
