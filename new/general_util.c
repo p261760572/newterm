@@ -141,7 +141,7 @@ int format_msg_data(char *data, int data_len, char *format, int len_start,
            	format_len = strlen(format_data);
 				}
 		}
-		else if(format_type == '7') {									// 格式化持卡人信息
+		else if(format_type == '8') {									// 格式化持卡人信息
 				if(data_len > 0) {
             if(memcmp(data+2+1+1+7+1,"NM",2)==0) {
             		strncpy(format_data, data, size-1);
@@ -152,7 +152,7 @@ int format_msg_data(char *data, int data_len, char *format, int len_start,
 			      }
 				}
 		}
-		else if(format_type == '8') {									// 格式化余额显示
+		else if(format_type == '9') {									// 格式化余额显示
 				if(data_len > 0) {
             sprintf(format_data, "%.2f", (data[27] == 'D' ? -1 : 1) * atof(data + 28)/100);
             format_len = strlen(format_data);
