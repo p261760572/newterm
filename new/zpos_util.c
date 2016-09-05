@@ -346,8 +346,8 @@ int _zpos_get_work_key(glob_msg_stru * pub_data_stru) {
     char psam[20];
     int i;
     ICS_DEBUG(0);
-    i=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                           DB_MSG_TYPE,psam, pub_data_stru->route_num == 0 ? 0 : 1,17);
+    i=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
+                           DB_MSG_TYPE,psam,17);
     if(i<=0) {
         dcs_log(0,0,"<%s> can not got psam_no!",__FUNCTION__);
         return -1;
