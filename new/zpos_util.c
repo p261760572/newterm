@@ -243,7 +243,7 @@ int zpos_fill_shopname(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     }
     dcs_debug(0,0,"<%s> begin",__FUNCTION__);
     n=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                          pub_data_stru->route_msg_type,psam,17);
+                          DB_MSG_TYPE,psam,17);
     if(n >0) psam[n]=0x00;
     else {
 
@@ -257,7 +257,7 @@ int zpos_fill_shopname(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         return -1;
     }
     dcs_debug(0,0,"<%s> end name=[%s]",__FUNCTION__,terminfo.name);
-    return add_pub_field(pub_data_stru,fldid, pub_data_stru->in_msg_type,
+    return add_pub_field(pub_data_stru,fldid, pub_data_stru->route_msg_type,
                          strlen(terminfo.name), terminfo.name, 1);
 }
 
@@ -330,7 +330,7 @@ int zpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
                 add_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->route_msg_type,i,tmp1+2+3+n,1);
                 dcs_debug(0,0,"<%s>track3=[%d][%s]",__FUNCTION__,i,tmp1+2+3+n);
             }
-            del_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->route_msg_type,0);
+            del_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->in_msg_type,0);
         } else {
             dcs_log(0,0,"<%s> convert track date failed! ",__FUNCTION__);
             strcpy(pub_data_stru->center_result_code,"91");
@@ -346,8 +346,8 @@ int _zpos_get_work_key(glob_msg_stru * pub_data_stru) {
     char psam[20];
     int i;
     ICS_DEBUG(0);
-    i=_get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->route_msg_type, "20"),
-                           pub_data_stru->route_msg_type,psam, pub_data_stru->route_num == 0 ? 0 : 1,17);
+    i=_get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
+                           DB_MSG_TYPE,psam, pub_data_stru->route_num == 0 ? 0 : 1,17);
     if(i<=0) {
         dcs_log(0,0,"<%s> can not got psam_no!",__FUNCTION__);
         return -1;
