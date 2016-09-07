@@ -18,12 +18,9 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
     init_pub_data_stru(&pub_data_stru);
     pub_data_stru.src_buffer=src_buf;
     pub_data_stru.src_len=src_len;
-	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(memcmp(src_buf, "0001", 4) == 0) { //超时处理
         memcpy(&pub_data_stru.timeout_table, src_buf + 4, sizeof(timeout_stru));
-		dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
         ret = timeout_proc(&pub_data_stru);
-		dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
         if(0 == ret)
             return -1;
         if(0 > ret) {
@@ -31,7 +28,6 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
             return -1;
         }
     }
-	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(pub_data_stru.use_timeout) {    //判断是否插超时表
 //暂时用1
 
@@ -39,7 +35,6 @@ int app_timeout_proc(char *src_buf, int src_len ,char *desc_buf, int size,int *t
             return -1;
         }
     }
-	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     *to_fid=fold_locate_folder(pub_data_stru.route_fold_name);
     if(*to_fid <0) {
         dcs_log(0,0,"<timeout_proc> fold_locate_folder error! route_fold_name=[%s]",pub_data_stru.route_fold_name);
@@ -118,10 +113,8 @@ int timeout_proc(glob_msg_stru *pub_data_stru) {
 //  dcs_log(0, 0, "<FILE:%s,LINE:%d>begin flag=%d", __FILE__, __LINE__,pub_data_stru->timeout_table.flag[0]);
     if(pub_data_stru->timeout_table.flag[0] == '0') return 0; //不处理
 //  dcs_log(0, 0, "<FILE:%s,LINE:%d>", __FILE__, __LINE__);
-	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     if(0>load_db_trans_info(pub_data_stru))//获取原始交易数据
         return -1;
-	dcs_debug(0,0,"at %s(%s:%d)",__FUNCTION__,__FILE__,__LINE__);
     c=pub_data_stru->timeout_table.flag[0];
     
     switch(pub_data_stru->timeout_table.flag[0]) {

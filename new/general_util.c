@@ -3584,3 +3584,67 @@ int tc_send(char *para, short flag, glob_msg_stru *pub_data_stru) {
     }
     return 1;
 }
+
+int get_data_from(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char fieldVal[512 + 1], *p, *ps, flag, tmpBuf[1024 + 1], *p1, buf[10 + 1],*msg_type, db_para[40], in_para[40];
+    int fieldLen, start, end, offset, n;
+    rtrim(para);
+    for(p = para; *p && *p !=','; p++);
+    *p++ = 0;
+    strncpy(in_para, para, sizeof(in_para));
+    for(para = p; *p && *p != ','; p++);
+    flag = *p;
+    *p = 0;
+    strncpy(db_para, para, sizeof(db_para));
+    if(pub_data_stru->req_flag) {
+    		msg_type = pub_data_stru->in_msg_type;
+    		para = in_para;
+    }
+    else {
+    		msg_type = DB_MSG_TYPE;
+    		para = db_para;
+    }
+    memset(fieldVal, 0, sizeof(fieldVal));
+    fieldLen = get_field_data_safe(pub_data_stru,
+                                   get_pub_field_id(msg_type,para),
+                                   msg_type,fieldVal,sizeof(fieldVal));
+    if(fieldLen <= 0)return 0;
+    	
+    if(flag && memcmp(pub_data_stru->center_result_code, "00000", strlen(pub_data_stru->center_result_code)) == 0)
+        p++;
+    else
+        return add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type,
+                             fieldLen, fieldVal, 1);
+    memset(tmpBuf, 0, sizeof(tmpBuf));
+    ps = p;
+    for(p1 = tmpBuf; *p && p-ps<strlen(ps);) {
+        if(*p == '#') {
+            p++;
+            if (*p == '1') {						// 截取字符
+                _ATOI(p+1, 2, start);
+                _ATOI(p+3, 2, end);
+                offset = 2*2+1;					//2*2为起止， 1结束符
+            } else if(*p == '2') {					// 分割字符					
+                _ATOI(p+2, 2, start);
+                end = start;
+                offset = 1+2+1;					// 1分隔符， 2起止符， 1结束符
+            }	else {
+                dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
+                return -1;
+            }
+	       		n = format_msg_data(fieldVal, fieldLen, p, start, end, p1, sizeof(tmpBuf)-strlen(tmpBuf)-1);
+	       		p1 += n;
+	       		p += offset+1;
+        } else if(*p == '\\') {
+            memcpy(buf, p + 1, 2);
+            p += 3;
+            asc_to_bcd((unsigned char *)p1, (unsigned char *)buf, 2, 0);
+            p1++;
+        } else {
+            *p1++ = *p++;
+        }
+    }
+    *p1 = 0;
+    return add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type,
+                         strlen(tmpBuf), tmpBuf, 1);
+}

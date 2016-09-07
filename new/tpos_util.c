@@ -3143,3 +3143,326 @@ int set_ctrl_info(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type, strlen(tmp), tmp, 1);
     return 1;
 }
+
+int print_formater(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char fmtMsgBuf[512 + 1], prtCtl[4], templetIndex[3], msgbuf[200], tmpbuf[100], fieldVal[512+1];
+    char advert_head[200],advert_inf[200],advert_tail[200],tmp[256],concat[200];
+    char *p,*p1,*p2,*msgtype;
+    int len, i,  fieldLen, start, end, src_flag, concat_flag = 0;
+    time_t time_cl ;
+    struct tm *time_tm;
+    struct TPOS_TERM_INFO terminfo;
+    ICS_DEBUG(0);
+    if(memcmp("00000", pub_data_stru->center_result_code,
+              strlen(pub_data_stru->center_result_code))) return 1;
+    len = 0;
+    rtrim(para);
+    p1 =  my_split(para,'|',tmp,sizeof(tmp));
+    if(p1) fmtMsgBuf[len++] =  tmp[0]; //打印份数
+		
+    while(*p1 && (p1=my_split(p1,'|',tmp,sizeof(tmp)))) {
+    		if(concat_flag == 0) memset(concat, 0 , sizeof(concat));
+    		if(tmp[strlen(tmp)-1] == '\\') {
+    				concat_flag = 1;	
+    				strcat(concat, tmp);
+    				concat[strlen(concat)-1] = '|';
+    				continue;
+    		}
+    		if(concat_flag == 1) {
+    				strcat(concat, tmp);
+    				p = concat;
+    		}
+        else p=tmp;
+        concat_flag = 0;
+        memcpy(prtCtl, p, 3);
+        p +=3;
+
+        if(memcmp(prtCtl,"%B",2)!=0
+           && memcmp(prtCtl,"%E",2)!=0
+           && memcmp(prtCtl,"%FD",2)!=0
+           && memcmp(prtCtl,"%FE",2)!=0
+           && memcmp(prtCtl,"%FF",3)!=0) {
+            dcs_log(0, 0, "<%s>print_format para controlling words[%s]-[%s]出错！",
+                    __FUNCTION__, para, prtCtl);
+            return -1;
+        }
+        if(memcmp(prtCtl,"%FD",3) ==0
+           || memcmp(prtCtl,"%FE",3)==0) {
+            // 判断是否需要过滤掉此指令
+            if(strcmp(pub_data_stru->route_msg_type,"TPOS")==0) {
+                char term_id[30];
+                i=get_field_data_safe(pub_data_stru,
+                                      get_pub_field_id(DB_MSG_TYPE,
+                                                       "ACQ_TERM_ID1"),
+                                      DB_MSG_TYPE,term_id,
+                                      sizeof(term_id));
+                if(i >0) term_id[i]=0x00;
+                else term_id[0]=0x00;
+                if(0< get_advert_inf(pub_data_stru,term_id,advert_head,sizeof(advert_head),advert_inf,
+					                 sizeof(advert_inf),advert_tail,sizeof(advert_tail))) {
+                    dcs_debug(0,0,"<%s>advert_head[%s],advert_inf[%s],advert_tail[%s]",__FUNCTION__,advert_head,advert_inf,advert_tail);
+                    if(strlen(advert_head) >0 && strlen(advert_inf) >0) {
+                        memcpy(fmtMsgBuf + len, "%FF", 3);
+                        len += 3;
+                        fmtMsgBuf[len++] = 0x00;
+                        p=advert_head;
+                        while(*p) {
+                            fmtMsgBuf[len] = *p;
+                            len++;
+                            p++;
+                        }
+                        fmtMsgBuf[len++] = 0;
+                        dcs_debug(0,0,"<%s>advert_head succ!",__FUNCTION__);
+                    }
+                    if(strlen(advert_inf) >0) {
+                        memcpy(fmtMsgBuf + len, prtCtl, 3);
+                        len += 3;
+                        fmtMsgBuf[len++] = 0x00;
+                        p=advert_inf;
+                        while(*p) {
+                            fmtMsgBuf[len] = *p;
+                            len++;
+                            p++;
+                        }
+                        fmtMsgBuf[len++] = 0;
+                        dcs_debug(0,0,"<%s>advert_inf succ![%s]",__FUNCTION__,advert_inf);
+                    }
+                    if(strlen(advert_tail) >0) {
+                        memcpy(fmtMsgBuf + len, "%FF", 3);
+                        len += 3;
+                        fmtMsgBuf[len++] = 0x00;
+                        p=advert_tail;
+                        while(*p) {
+                            fmtMsgBuf[len] = *p;
+                            len++;
+                            p++;
+                        }
+                        dcs_debug(0,0,"<%s>advert_tail succ!",__FUNCTION__);
+                    }
+                } else continue;
+            }
+        } else {
+            memcpy(templetIndex, p , 2);
+            p += 2;
+            templetIndex[2] = 0;
+            memcpy(fmtMsgBuf + len, prtCtl, 3);
+            len += 3;
+            fmtMsgBuf[len++] = atoi(templetIndex);
+        }
+
+        if(len > 512) {
+            dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len, 1);
+            return -1;
+        }
+        if(*p && *p=='#') p++;
+        	
+				while(*p && (p=my_split(p,'#',tmpbuf,sizeof(tmpbuf)))) {
+						p2 = tmpbuf;
+						src_flag = 0;
+						switch(*p2++) {
+                case '1':
+                    msgtype = pub_data_stru->route_msg_type;
+                    break;
+                case '2':
+                    msgtype = DB_MSG_TYPE;
+                    break;
+                case '3':
+                    src_flag = 1;
+                    break;
+                default:
+                    msgtype = pub_data_stru->in_msg_type;
+                    break;
+            }
+            if(src_flag == 1) {
+            		fieldLen = 0;
+            		while(*p2) {
+		            		if(*p2 == '\\') {
+				                memcpy(msgbuf, p2 + 1, 2);
+				                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)msgbuf, 2, 1);
+				                len += 1;
+				                p2=p2+3;
+				            } else {
+				                fmtMsgBuf[len++] = *p2++;
+				            }
+				        }
+            }
+            else if(memcmp(p2, "EEE", 3) == 0) { //商户名称
+                fieldLen = _get_field_data_safe(pub_data_stru,
+                                                get_pub_field_id(DB_MSG_TYPE,
+                                                        "ACQ_TERM_ID1"),
+                                                DB_MSG_TYPE,
+                                                fieldVal,2,sizeof(fieldVal));
+                if(fieldLen <= 0) {
+                    dcs_log(0, 0, "<%s>取PSAM_NO出错[%d][%d]！", __FUNCTION__,
+                            get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
+                            pub_data_stru->route_num);
+                    return -1;
+                }
+                if(0 > get_tpos_info(fieldVal, &terminfo)) {
+                    dcs_log(0, 0, "<%s>取PSAM_NO[%s]终端信息出错！", __FUNCTION__,fieldVal);
+                    return -1;
+                }
+                fieldLen = strlen(terminfo.name);
+                if(512 < len + fieldLen) {
+                    dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！",
+                            __FUNCTION__,para, len, fieldLen);
+                    return -1;
+                }
+                dcs_log(0, 0, "<%s>打印信息[%s]-[%d]+[%d]！",
+                        __FUNCTION__,terminfo.name, len, fieldLen);
+                memcpy(fieldVal, terminfo.name, fieldLen);
+                p2=p2+3;
+            } else {
+                if(strlen(p2) >3) {
+                    memcpy(msgbuf,p2,3);
+                    msgbuf[3]=0x00;
+                } else {
+                    snprintf(msgbuf,sizeof(msgbuf),"%s",p2);
+                    msgbuf[strlen(p2)]=0x00;
+                }
+                if(strlen(p2) >3) p2=p2+3;
+                else    p2=p2+strlen(p2);
+                fieldLen = get_field_data_safe(pub_data_stru,
+                                                       atoi(msgbuf),
+                                                       msgtype,
+                                                       fieldVal,sizeof(fieldVal));
+            }
+            if(*p2) {						// 数据域格式化
+            		if(*p2 =='1' || *p2 == '3') {					// 字符串截取
+		                _ATOI(p2+1, 2, start);						// 获取开始位置
+		                _ATOI(p2+3, 2, end);							// 获取结束位置
+		            } else if(*p2 =='2' || *p2 == '4') {	//字符串分割
+		            		_ATOI(p2+2, 3, start);							// 获取开始位置
+		            		end = start;
+		            } 
+		            fieldLen = format_msg_data(fieldVal, fieldLen, p2, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
+            } else if(fieldLen > 0) {
+            		if(len+fieldLen > 512) {
+				            dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
+				            return -1;
+				        }
+            		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
+            }
+            len += (fieldLen < 0? 0:fieldLen);
+				}
+        fmtMsgBuf[len++] = 0;
+    }
+    add_pub_field(pub_data_stru, fldid,
+                  pub_data_stru->route_msg_type,
+                  len, fmtMsgBuf, 1);
+    return 1;
+}
+
+int show_formater(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+    char fieldVal[256 + 1], *p,*p1,*p2,tmp[512],fmtMsgBuf[512 + 1],msgbuf[200],concat[200],tmpbuf[100],*msgtype;
+    int len,fieldLen, start=0, end=0, src_flag, concat_flag = 0;
+
+    dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+    if(memcmp("00000", pub_data_stru->center_result_code,
+              strlen(pub_data_stru->center_result_code))) return 1;
+
+    if(para == NULL) {
+        dcs_log(0,0,"<%s> para is null",__FUNCTION__);
+        return -1;
+    }
+    len=0;
+
+    rtrim(para);
+    p1=my_split(para,'|',tmp,sizeof(tmp));
+    if(p1 == NULL) return -1;
+    fmtMsgBuf[len++] = 0x31; //刷新后显示
+    // 显示时间的长短
+    asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmp, 2, 0);
+    len++;
+    // 响应码
+    memcpy(fmtMsgBuf + len, pub_data_stru->center_result_code, 3);
+    len += 3;
+    for(p=my_split(p1,'|',tmp,sizeof(tmp)); p; p=my_split(p,'|',tmp,sizeof(tmp))) {
+    		if(concat_flag == 0) memset(concat, 0 , sizeof(concat));
+    		if(tmp[strlen(tmp)-1] == '\\') {
+    				concat_flag = 1;	
+    				strcat(concat, tmp);
+    				concat[strlen(concat)-1] = '|';
+    //				dcs_log(0, 0, "at %s(%s:%d)concat=%s, tmp=%s", __func__, __FILE__, __LINE__, concat, tmp);
+    				continue;
+    		}
+    		if(concat_flag == 1) {
+    				strcat(concat, tmp);
+    				p1 = concat;
+    		}
+        else p1=tmp;
+        concat_flag = 0;
+        if(*p1 && *p1=='#') p1++;
+    //    dcs_log(0, 0, "at %s(%s:%d)p1=%s", __func__, __FILE__, __LINE__, p1);
+        while(*p1 && (p1=my_split(p1,'#',tmpbuf,sizeof(tmpbuf)))) {
+						p2 = tmpbuf;
+						src_flag = 0;
+						switch(*p2++) {
+                case '1':
+                    msgtype = pub_data_stru->route_msg_type;
+                    break;
+                case '2':
+                    msgtype = DB_MSG_TYPE;
+                    break;
+                case '3':
+                    src_flag = 1;
+                    break;
+                default:
+                    msgtype = pub_data_stru->in_msg_type;
+                    break;
+            }
+            if(src_flag == 1) {
+            		fieldLen = 0;
+            		while(*p2) {
+		            		if(*p2 == '\\') {
+				                memcpy(msgbuf, p2 + 1, 2);
+				                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)msgbuf, 2, 1);
+				                len += 1;
+				                p2=p2+3;
+				            } else {
+				                fmtMsgBuf[len++] = *p2++;
+				            }
+				        }
+            }
+						else {
+                if(strlen(p2) >3) {
+                    memcpy(msgbuf,p2,3);
+                    msgbuf[3]=0x00;
+                } else {
+                    snprintf(msgbuf,sizeof(msgbuf),"%s",p2);
+                    msgbuf[strlen(p2)]=0x00;
+                }
+                if(strlen(p2) >3) p2=p2+3;
+                else    p2=p2+strlen(p2);
+                
+                fieldLen = get_field_data_safe(pub_data_stru,
+                                               atoi(msgbuf),
+                                               msgtype,
+                                               fieldVal,sizeof(fieldVal));
+                if(*p2) {						// 数据域格式化
+                		if(*p2 =='1' || *p2 == '3') {					// 字符串截取
+				                _ATOI(p2+1, 2, start);						// 获取开始位置
+				                _ATOI(p2+3, 2, end);							// 获取结束位置
+				            } else if(*p2 =='2' || *p2 == '4') {	//字符串分割
+				            		_ATOI(p2+2, 3, start);							// 获取开始位置
+				            		end = start;
+				            } 
+				            fieldLen = format_msg_data(fieldVal, fieldLen, p2, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
+                } else if(fieldLen > 0) {
+                		if(len+fieldLen > 512) {
+						            dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
+						            return -1;
+						        }
+                		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
+                }
+                len += (fieldLen < 0? 0:fieldLen);
+            } 
+        }
+    }
+
+    if(len  > 0)
+        add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type,
+                      len, fmtMsgBuf, 1);
+    dcs_debug(fmtMsgBuf,len,"<%s> [%s]end",__FUNCTION__,fmtMsgBuf+5);
+    return len;
+}

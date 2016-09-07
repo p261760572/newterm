@@ -113,12 +113,14 @@ FLDSET_DEF gl_genrate_field_conver[]= { //通用域转换处理函数
 
 FLDSET_DEF gl_priv_field_conver[]= {  //特殊域转换处理函数
     {"GET_DB_DATA", get_db_data},
+    {"GET_DATA_FROM", get_data_from},
 //  {"GET_TPOS_DATA", get_tpos_data},
     {"GET_SEQ", get_seq},
     {"GET_REF", get_ref},
     {"GET_SYSTIME", get_systime},
     {"GET_DEFAULT", get_default},
     {"PRINT_FORMAT", print_format},
+    {"PRINT_FORMATER", print_formater},
     {"ORG_TRANS_INFO", get_org_trans_info},
     {"GET_MSG_DATA", get_msg_data},
     {"GET_MSG_DATA_FILL", get_msg_data_fill},
@@ -132,6 +134,7 @@ FLDSET_DEF gl_priv_field_conver[]= {  //特殊域转换处理函数
     {"MAKE_DATA", make_data},
 //  {"IC_PARA_DATA", ic_para_data},
     {"SHOW_FORMAT", show_format},
+    {"SHOW_FORMATER", show_formater},
     {"SET_CTRL_INFO", set_ctrl_info},
     {"E_PAYMENT_48", electricity_payment_48},
     {"FILL_SHOP_NAME", zpos_fill_shopname},
