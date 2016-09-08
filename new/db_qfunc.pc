@@ -2445,7 +2445,7 @@ int end_trans(glob_msg_stru *pub_data_stru) {
     strcpy_s(pub_data_stru->center_result_code, "00", sizeof(pub_data_stru->center_result_code));
     sprintf(show_err, "交易类型：%s\n交易日期：%s\n交易时间：%s\n交易卡号："
     									"%s\n交易金额：%.2f元\n交易返回码：%s\n交易状态：%s",
-    									v_app_name, TransLog.acq_date, TransLog.acq_time, TransLog.pay_acct_no,
+    									v_app_name, TransLog.sys_date, TransLog.sys_time, TransLog.pay_acct_no,
     									atof(TransLog.amount_real)/100, TransLog.resp_cd_rcv, 
     									TransLog.void_flag[0] == '0'?"正常":"已冲正");
     add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
@@ -2466,7 +2466,7 @@ int end_trans(glob_msg_stru *pub_data_stru) {
 int end_trans_print(glob_msg_stru *pub_data_stru) {
     tl_trans_log_def TransLog;
     int field_id, term_id1, term_id2, i=0, len=0;
-    char show_err[512], v_app_name[40+1], mchnt_name[60+1], acq_date[10+1], acq_time[8+1];
+    char show_err[512], v_app_name[40+1], mchnt_name[60+1], sys_date[10+1], sys_time[8+1];
     
     memset(show_err, 0, sizeof(show_err));
     memset(&TransLog, 0, sizeof(TransLog));
@@ -2637,21 +2637,21 @@ int end_trans_print(glob_msg_stru *pub_data_stru) {
     strcpy_s(pub_data_stru->center_result_code, TransLog.resp_cd_rcv, sizeof(pub_data_stru->center_result_code));
     
     int flag = 0;
-    for(i = 0; i<strlen(TransLog.acq_date); i += 2) {
-    		memcpy(acq_date+len, TransLog.acq_date+i, 2);
+    for(i = 0; i<strlen(TransLog.sys_date); i += 2) {
+    		memcpy(sys_date+len, TransLog.sys_date+i, 2);
     		len += 2;
     		if(flag == 0) {
     				flag = 1;
     				continue;
     		}
-    		acq_date[len++] = '-';
+    		sys_date[len++] = '-';
     }
-    acq_date[len-1] = 0x0;
+    sys_date[len-1] = 0x0;
     i=0; len=0;
-    while(i<strlen(TransLog.acq_time) && 
-    			memcpy(acq_time+len, TransLog.acq_time+i, 2) && 
-    			((len +=2) && (acq_time[len++] = ':') && (i+=2)));
-   	acq_time[len-1] = 0x0;
+    while(i<strlen(TransLog.sys_time) && 
+    			memcpy(sys_time+len, TransLog.sys_time+i, 2) && 
+    			((len +=2) && (sys_time[len++] = ':') && (i+=2)));
+   	sys_time[len-1] = 0x0;
     
     sprintf(show_err, "          (重打印)\n特约商户名称：\n%s\n"
     									"终端编号：\n%s\n特约商户编号：\n%s\n"
@@ -2659,7 +2659,7 @@ int end_trans_print(glob_msg_stru *pub_data_stru) {
     									"日期/时间：\n%s %s\n交易参考号：%s\n"
     									"交易流水号：%s\n交易金额：%.2f元",
     									mchnt_name, TransLog.pay_term_id1, TransLog.pay_term_id2, 
-    									TransLog.pay_acct_no, v_app_name, acq_date, acq_time, 
+    									TransLog.pay_acct_no, v_app_name, sys_date, sys_time, 
     									TransLog.sys_ref_no, TransLog.acq_tra_no, atof(TransLog.amount_real)/100);
     add_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"48"),
                           pub_data_stru->in_msg_type, strlen(show_err),show_err,0);
