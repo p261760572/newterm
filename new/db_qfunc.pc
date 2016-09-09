@@ -2252,7 +2252,7 @@ int get_end_trans(char *para, short flag, glob_msg_stru *pub_data_stru) {
         SYS_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD') AND ACQ_INSTI_CODE = :pub_data_stru->insti_code
         AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
         AND RCV_ACCT_NO = :TransLog.rcv_acct_no
-       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+       ORDER BY SYS_DATE DESC, SYS_TIME DESC
     )
     WHERE ROWNUM = 1;
     if(sqlca.sqlcode == 1403) {
@@ -2420,7 +2420,7 @@ int end_trans(glob_msg_stru *pub_data_stru) {
         AND ACQ_TERM_ID1 = :TransLog.acq_term_id1 AND ACQ_TERM_ID2 = :TransLog.acq_term_id2
         AND PAY_ACCT_NO = nvl(:TransLog.pay_acct_no,PAY_ACCT_NO)
         AND T.APP_TYPE = T2.APP_TYPE
-       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+       ORDER BY SYS_DATE DESC, SYS_TIME DESC
     )
     WHERE ROWNUM = 1;
     if(sqlca.sqlcode == 1403) {
@@ -2608,7 +2608,7 @@ int end_trans_print(glob_msg_stru *pub_data_stru) {
         and T.ACQ_TERM_ID1 = T3.PSAM
         AND TRIM(T.RESP_CD_PAY) = '00'
         AND T.VOID_FLAG = '0'
-       ORDER BY ACQ_DATE DESC, ACQ_TIME DESC
+       ORDER BY SYS_DATE DESC, SYS_TIME DESC
     )
     WHERE ROWNUM = 1;
     if(sqlca.sqlcode == 1403) {

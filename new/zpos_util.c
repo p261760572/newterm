@@ -242,8 +242,8 @@ int zpos_fill_shopname(char *para, short fldid, glob_msg_stru *pub_data_stru) {
         return 1;
     }
     dcs_debug(0,0,"<%s> begin",__FUNCTION__);
-    n=get_field_data_safe(pub_data_stru,get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                          DB_MSG_TYPE,psam,17);
+    n=get_field_data_safe(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type, "20"),
+                          pub_data_stru->in_msg_type,psam,17);
     if(n >0) psam[n]=0x00;
     else {
 
@@ -302,20 +302,20 @@ int zpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
                 return -1;
             }
             if(n>0)
-                add_pub_field(pub_data_stru, FIELD_TRACK2,pub_data_stru->route_msg_type,n,tmp1+2,1);
+                add_pub_field(pub_data_stru, FIELD_TRACK2,pub_data_stru->in_msg_type,n,tmp1+2,1);
 
             for(i = 2; tmp1[i] && tmp1[i] != '='; i++);
             if(tmp1[i]  == '=' && i + 5 < strlen(tmp1)) {
                 if(tmp1[i + 5] == '2' || tmp1[i + 5] == '6') {
-                    add_pub_field(pub_data_stru, 60, pub_data_stru->route_msg_type, 15, "000005200900000", 1);
+                    add_pub_field(pub_data_stru, 60, pub_data_stru->in_msg_type, 15, "000005200900000", 1);
                 } else {
-                    add_pub_field(pub_data_stru, 60, pub_data_stru->route_msg_type, 15, "000005000900000", 1);
+                    add_pub_field(pub_data_stru, 60, pub_data_stru->in_msg_type, 15, "000005000900000", 1);
                 }
             } else
-                add_pub_field(pub_data_stru, 60, pub_data_stru->route_msg_type, 15, "000005000900000", 1);
+                add_pub_field(pub_data_stru, 60, pub_data_stru->in_msg_type, 15, "000005000900000", 1);
             tmp1[i] = 0x00;
             if(strlen(tmp1+2)<=19 && strlen(tmp1+2)>0)
-                add_pub_field(pub_data_stru, FIELD_CARD_NO, pub_data_stru->route_msg_type,
+                add_pub_field(pub_data_stru, FIELD_CARD_NO, pub_data_stru->in_msg_type,
                               strlen(tmp1+2), tmp1+2, 1);
             dcs_debug(0,0,"<%s>card_no=[%s]",__FUNCTION__,tmp1+2);
             memcpy(tmp,tmp1+2+n,3);
@@ -327,7 +327,7 @@ int zpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
                     strcpy(pub_data_stru->center_result_code,"30");
                     return -1;
                 }
-                add_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->route_msg_type,i,tmp1+2+3+n,1);
+                add_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->in_msg_type,i,tmp1+2+3+n,1);
                 dcs_debug(0,0,"<%s>track3=[%d][%s]",__FUNCTION__,i,tmp1+2+3+n);
             }
             del_pub_field(pub_data_stru,FIELD_TRACK3,pub_data_stru->in_msg_type,0);
@@ -338,7 +338,7 @@ int zpos_field_pre_conv(char *para, short flag, glob_msg_stru *pub_data_stru) {
         }
 
     } else
-        add_pub_field(pub_data_stru, 60, pub_data_stru->route_msg_type, 15, "000000000300000", 1);
+        add_pub_field(pub_data_stru, 60, pub_data_stru->in_msg_type, 15, "000000000300000", 1);
     return 1;
 }
 

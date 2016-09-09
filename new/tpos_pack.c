@@ -42,7 +42,6 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
 //tmp_order[1]，终端需要自动更新菜单标识
     if(pub_data_stru->tmp_order[1]==0x31 &&
        memcmp(pub_data_stru->center_result_code,"00",2) ==0) {
-
         if(is_permit_update_menu("TPOS",func_code)) { //为自动更新菜单加入
             del_route_set(pub_data_stru,msg_type,"26");//删除挂机指令
             add_route_set(pub_data_stru,msg_type,"0D", 1);
@@ -55,8 +54,8 @@ int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
             add_pub_field(pub_data_stru,get_pub_field_id(msg_type,"25"),msg_type,
                           0,NULL,1); //增加接收指令
             if(0>update_pub_field(pub_data_stru,get_pub_field_id(msg_type,"FUNC_CODE"),
-                                  msg_type,3,"003",2)) {
-                update_pub_field(pub_data_stru,get_pub_field_id(msg_type,"FUNC_CODE"),
+                                  msg_type,3,"003",1)) {
+                update_pub_field(pub_data_stru,get_pub_field_id(pub_data_stru->in_msg_type,"FUNC_CODE"),
                                  msg_type,3,"003",0);
             }
         }
