@@ -2314,212 +2314,314 @@ int tpos_reversed(glob_msg_stru * pub_data_stru) {
 
 例：1|%B101|%E103|%FF06FFFF|%FF07#07|%FF0D#02|%FF15#20|%FF09#04
 */
-int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
-    char fmtMsgBuf[512 + 1], prtCtl[4], templetIndex[3], msgbuf[200], tmpbuf[100], fieldVal[512+1];
-    char advert_head[200],advert_inf[200],advert_tail[200],tmp[256];
-    char *p,*p1,*msgtype;
-    int len, i,  fieldLen, start, end, format_len=0;
-    time_t time_cl ;
-    struct tm *time_tm;
-    struct TPOS_TERM_INFO terminfo;
-    ICS_DEBUG(0);
-    if(memcmp("00000", pub_data_stru->center_result_code,
-              strlen(pub_data_stru->center_result_code))) return 1;
-    len = 0;
-//  i = 0;
-    rtrim(para);
-    p1 =  my_split(para,'|',tmp,sizeof(tmp));
-    if(p1) fmtMsgBuf[len++] =  tmp[0]; //打印份数
+int print_format(char *para, short fldid, glob_msg_stru *pub_data_stru)
+{
+	char fmtMsgBuf[512 + 1], prtCtl[4], templetIndex[3], msgbuf[200], tmpbuf[100], fieldVal[512+1];
+	char advert_head[200],advert_inf[200],advert_tail[200],tmp[256];
+	char *p,*p1;
+	int len, i,  fieldLen;
+	time_t time_cl ;                                                   
+	struct tm *time_tm;
+	struct TPOS_TERM_INFO terminfo;
+	ICS_DEBUG(0);
+	if(memcmp("00000", pub_data_stru->center_result_code, 
+		        strlen(pub_data_stru->center_result_code))) return 1;
+	len = 0;
+//	i = 0;
+	rtrim(para);
+	p1 =  my_split(para,'|',tmp,sizeof(tmp));
+	if(p1) fmtMsgBuf[len++] =  tmp[0]; //打印份数
 
-    while((p1=my_split(p1,'|',tmp,sizeof(tmp)))) {
-        p=tmp;
-        memcpy(prtCtl, p, 3);
-        p +=3;
-
-        if(memcmp(prtCtl,"%B",2)!=0
-           && memcmp(prtCtl,"%E",2)!=0
-           && memcmp(prtCtl,"%FD",2)!=0
-           && memcmp(prtCtl,"%FE",2)!=0
-           && memcmp(prtCtl,"%FF",3)!=0) {
-            dcs_log(0, 0, "<%s>print_format para controlling words[%s]-[%s]出错！",
-                    __FUNCTION__, para, prtCtl);
-            return -1;
-        }
-        if(memcmp(prtCtl,"%FD",3) ==0
-           || memcmp(prtCtl,"%FE",3)==0) {
-            // 判断是否需要过滤掉此指令
-            if(strcmp(pub_data_stru->route_msg_type,"TPOS")==0) {
-                char term_id[30];
-                i=get_field_data_safe(pub_data_stru,
-                                      get_pub_field_id(DB_MSG_TYPE,
-                                                       "ACQ_TERM_ID1"),
-                                      DB_MSG_TYPE,term_id,
-                                      sizeof(term_id));
-                if(i >0) term_id[i]=0x00;
-                else term_id[0]=0x00;
-                if(p && *p) {
-                		memcpy(fmtMsgBuf + len, prtCtl, 3);
-                    len += 3;
-                    fmtMsgBuf[len++] = 0x00;
-                }
-                else if(0< get_advert_inf(pub_data_stru,term_id,advert_head,sizeof(advert_head),advert_inf,
-					                 sizeof(advert_inf),advert_tail,sizeof(advert_tail))) {
-//                  advert_inf[i]=0x00;
-                    dcs_debug(0,0,"<%s>advert_head[%s],advert_inf[%s],advert_tail[%s]",__FUNCTION__,advert_head,advert_inf,advert_tail);
-                    if(strlen(advert_head) >0 && strlen(advert_inf) >0) {
-                        memcpy(fmtMsgBuf + len, "%FF", 3);
-                        len += 3;
-                        fmtMsgBuf[len++] = 0x00;
-                        p=advert_head;
-                        while(*p) {
-                            fmtMsgBuf[len] = *p;
-                            len++;
-                            p++;
-                        }
-                        fmtMsgBuf[len++] = 0;
-                        dcs_debug(0,0,"<%s>advert_head succ!",__FUNCTION__);
-                    }
-                    if(strlen(advert_inf) >0) {
-                        memcpy(fmtMsgBuf + len, prtCtl, 3);
-                        len += 3;
-                        fmtMsgBuf[len++] = 0x00;
-                        p=advert_inf;
-                        while(*p) {
-                            fmtMsgBuf[len] = *p;
-                            len++;
-                            p++;
-                        }
-                        fmtMsgBuf[len++] = 0;
-                        dcs_debug(0,0,"<%s>advert_inf succ![%s]",__FUNCTION__,advert_inf);
-                    }
-//                if( strlen( advert_tail) >0 && strlen( advert_inf) >0 )
-                    if(strlen(advert_tail) >0) {
-                        memcpy(fmtMsgBuf + len, "%FF", 3);
-                        len += 3;
-                        fmtMsgBuf[len++] = 0x00;
-                        p=advert_tail;
-                        while(*p) {
-                            fmtMsgBuf[len] = *p;
-                            len++;
-                            p++;
-                        }
-                        dcs_debug(0,0,"<%s>advert_tail succ!",__FUNCTION__);
-//                    fmtMsgBuf[len++] = 0;
-                    }
+	while((p1=my_split(p1,'|',tmp,sizeof(tmp))))
+	{
+		p=tmp;
+		memcpy(prtCtl, p, 3); 
+		p +=3;
+		
+		if( memcmp(prtCtl,"%B",2)!=0   
+			  && memcmp(prtCtl,"%E",2)!=0
+			  && memcmp(prtCtl,"%FD",2)!=0
+			  && memcmp(prtCtl,"%FE",2)!=0
+			  && memcmp(prtCtl,"%FF",3)!=0 )
+		{
+			dcs_log(0, 0, "<%s>print_format para controlling words[%s]-[%s]出错！", 
+			        __FUNCTION__, para, prtCtl);
+			return -1;
+		}
+		if( memcmp(prtCtl,"%FD",3) ==0
+			  || memcmp(prtCtl,"%FE",3)==0)
+		{
+			// 判断是否需要过滤掉此指令
+			if( strcmp(pub_data_stru->route_msg_type,"TPOS")==0)
+			{
+				char term_id[30];
+				i=get_field_data_safe(pub_data_stru,
+				                      get_pub_field_id(DB_MSG_TYPE, 
+				                                       "ACQ_TERM_ID1"), 
+				                      DB_MSG_TYPE,term_id,
+				                      sizeof(term_id));
+				if( i >0 ) term_id[i]=0x00;
+				else term_id[0]=0x00;
+				if ( 0< get_advert_inf(pub_data_stru,term_id,advert_head,sizeof(advert_head),
+																advert_inf,sizeof(advert_inf),advert_tail, sizeof(advert_tail)))
+				{
+//					advert_inf[i]=0x00;
+          dcs_debug(0,0,"<%s>advert_head[%s],advert_inf[%s],advert_tail[%s]",__FUNCTION__,advert_head,advert_inf,advert_tail);
+          if( strlen( advert_head) >0 && strlen( advert_inf) >0 )
+          {
+						memcpy(fmtMsgBuf + len, "%FF", 3); len += 3;
+						fmtMsgBuf[len++] = 0x00;
+						p=advert_head;
+						while(*p)
+						{
+							fmtMsgBuf[len] = *p;
+						  len++;p++;
+					  }	
+					  fmtMsgBuf[len++] = 0;
+					  dcs_debug(0,0,"<%s>advert_head succ!",__FUNCTION__);
+          }
+					if( strlen( advert_inf) >0 )
+					{	
+						memcpy(fmtMsgBuf + len, prtCtl, 3); len += 3;
+						fmtMsgBuf[len++] = 0x00;
+						p=advert_inf;
+						while(*p)
+						{
+							fmtMsgBuf[len] = *p;
+						  len++;p++;
+					  }	
+					  fmtMsgBuf[len++] = 0;
+					  dcs_debug(0,0,"<%s>advert_inf succ![%s]",__FUNCTION__,advert_inf);
+				  }
+//				  if( strlen( advert_tail) >0 && strlen( advert_inf) >0 )
+				  if( strlen( advert_tail) >0)
+          {
+						memcpy(fmtMsgBuf + len, "%FF", 3); len += 3;
+						fmtMsgBuf[len++] = 0x00;
+						p=advert_tail;
+						while(*p)
+						{
+							fmtMsgBuf[len] = *p;
+						  len++;p++;
+					  }	
+					  dcs_debug(0,0,"<%s>advert_tail succ!",__FUNCTION__);
+//					  fmtMsgBuf[len++] = 0;
+          }
 //          continue;
-                } 
-            }
-        } else {
-            memcpy(templetIndex, p , 2);
-            p += 2;
-            templetIndex[2] = 0;
-            memcpy(fmtMsgBuf + len, prtCtl, 3);
-            len += 3;
-            fmtMsgBuf[len++] = atoi(templetIndex);
-        }
+				}
+				else continue;
+			}
+		}
+		else {
+			memcpy(templetIndex, p , 2); p += 2;
+		  templetIndex[2] = 0;
+			memcpy(fmtMsgBuf + len, prtCtl, 3); len += 3;	
+			fmtMsgBuf[len++] = atoi(templetIndex);
+	  }
 
-        if(len > 512) {
-            dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len, 1);
-            return -1;
-        }
+		if(len > 512) 
+		{
+			dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len, 1);
+			return -1;
+		}
+		
+		while	(*p)
+		{
+			if( *p == '#')
+			{
+				p++;
+				if(memcmp(p, "EEE", 3) == 0) //商户名称
+				{
+					fieldLen = _get_field_data_safe(pub_data_stru,
+						                              get_pub_field_id(DB_MSG_TYPE,
+                                                        "ACQ_TERM_ID1"),
+						                              DB_MSG_TYPE, 
+						                              fieldVal,2,sizeof(fieldVal));
+					if(fieldLen <= 0)
+					{
+						dcs_log(0, 0, "<%s>取PSAM_NO出错[%d][%d]！", __FUNCTION__, 
+						        get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"), 
+						        pub_data_stru->route_num);
+						return -1;
+					}
+					fieldVal[fieldLen]=0x00;
+					if(0 > get_tpos_info(fieldVal, &terminfo))
+					{
+						dcs_log(0, 0, "<%s>取PSAM_NO[%]终端信息出错！", __FUNCTION__,fieldVal);
+						return -1;
+					}
+					fieldLen = strlen(terminfo.name);
+					if(512 < len + fieldLen)
+					{
+						dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+						         __FUNCTION__,para, len, fieldLen);
+						return -1;
+					}
+					dcs_log(0, 0, "<%s>打印信息[%s]-[%d]+[%d]！", 
+					        __FUNCTION__,terminfo.name, len, fieldLen);
+					memcpy(fmtMsgBuf + len, terminfo.name, fieldLen); len += fieldLen;
+					p=p+3;														 						   							
+				}
+				else
+				{
+					if( strlen(p) >3) 
+				  {
+				  	memcpy(msgbuf,p,3); 
+				  	msgbuf[3]=0x00;
+				  }
+					else 
+					{
+						snprintf(msgbuf,sizeof(msgbuf),"%s",p); 
+						msgbuf[strlen(p)]=0x00;
+					}
+					switch(atoi(msgbuf))
+					{
+						case FIELD_CARD_NO:
+							fieldLen = get_field_data_safe(pub_data_stru, 
+							                               FIELD_CARD_NO, 
+							                               pub_data_stru->in_msg_type, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen > 0)
+							{
+							   	memset(tmpbuf,0,sizeof(tmpbuf));
+							   	memcpy(tmpbuf, fieldVal, fieldLen);
+							   	if(fieldLen > 10)
+							   		memset(tmpbuf + 6, '*', fieldLen - 10);
+									if(512 < len + fieldLen)
+									{
+										dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+										        __FUNCTION__,para, len, fieldLen);
+										return -1;
+									}
+							   	memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen; 						   		
+							}
+							break;
+						case FIELD_DATE_TIME_Y:
+							if(0 > (fieldLen=get_field_data_safe(pub_data_stru,
+								                                   FIELD_DATE_TIME_Y, 
+								                                   pub_data_stru->in_msg_type, 
+								                                   fieldVal,sizeof(fieldVal))))
+							{
+								fieldVal[fieldLen]=0x00;
+								time(&time_cl) ;                                                   
+								time_tm = localtime(&time_cl);                                      
+								if(strftime(fieldVal, 20, "%Y%m%d%H%M%S",time_tm) == 0) return 0;    
+								add_pub_field(pub_data_stru, 
+								              FIELD_DATE_TIME_Y, 
+								              pub_data_stru->route_msg_type, 
+								              14, fieldVal, 1);                                                    
+							}
+							fieldLen = 19;
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, fieldVal, 4); len += 4;
+							fmtMsgBuf[len++] = '-';
+							memcpy(fmtMsgBuf + len, fieldVal + 4, 2); len += 2;
+							fmtMsgBuf[len++] = '-';
+							memcpy(fmtMsgBuf + len, fieldVal + 6, 2); len += 2;
+							fmtMsgBuf[len++] = ' ';
+							memcpy(fmtMsgBuf + len, fieldVal + 8, 2); len += 2;
+							fmtMsgBuf[len++] = ':';
+							memcpy(fmtMsgBuf + len, fieldVal + 10, 2); len += 2;
+							fmtMsgBuf[len++] = ':';
+							memcpy(fmtMsgBuf + len, fieldVal + 12, 2); len += 2;							 						   		
+							break;
+						case FIELD_PAY_FEE:
+						case 910: //上送金额
+						case 917: //扣款金额
+							fieldLen = get_field_data_safe(pub_data_stru,atoi(p), 
+							                               DB_MSG_TYPE, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+							fieldVal[fieldLen]=0x00;
+							if(fieldVal[0] >= '0' && fieldVal[0] <= '9')
+								sprintf(tmpbuf, "%.2f", atof(fieldVal)/100);
+							else
+								sprintf(tmpbuf, "%.2f", atof(fieldVal+1)/100);
 
-        while(*p) {
-            if(*p == '#') {
-                p++;
-                switch(*p++) {
-		                case '1':
-		                    msgtype = pub_data_stru->route_msg_type;
-		                    break;
-		                case '2':
-		                    msgtype = DB_MSG_TYPE;
-		                    break;
-		                default:
-		                    msgtype = pub_data_stru->in_msg_type;
-		                    break;
-		            }
-		            
-                if(memcmp(p, "EEE", 3) == 0) { //商户名称
-                    fieldLen = _get_field_data_safe(pub_data_stru,
-                                                    get_pub_field_id(DB_MSG_TYPE,
-                                                            "ACQ_TERM_ID1"),
-                                                    DB_MSG_TYPE,
-                                                    fieldVal,2,sizeof(fieldVal));
-                    if(fieldLen <= 0) {
-                        dcs_log(0, 0, "<%s>取PSAM_NO出错[%d][%d]！", __FUNCTION__,
-                                get_pub_field_id(DB_MSG_TYPE, "ACQ_TERM_ID1"),
-                                pub_data_stru->route_num);
-                        return -1;
-                    }
-                    if(0 > get_tpos_info(fieldVal, &terminfo)) {
-                        dcs_log(0, 0, "<%s>取PSAM_NO[%s]终端信息出错！", __FUNCTION__,fieldVal);
-                        return -1;
-                    }
-                    fieldLen = strlen(terminfo.name);
-                    if(512 < len + fieldLen) {
-                        dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！",
-                                __FUNCTION__,para, len, fieldLen);
-                        return -1;
-                    }
-                    dcs_log(0, 0, "<%s>打印信息[%s]-[%d]+[%d]！",
-                            __FUNCTION__,terminfo.name, len, fieldLen);
-                    memcpy(fieldVal, terminfo.name, fieldLen);
-                    p=p+3;
-                } else {
-                    if(strlen(p) >3) {
-                        memcpy(msgbuf,p,3);
-                        msgbuf[3]=0x00;
-                    } else {
-                        snprintf(msgbuf,sizeof(msgbuf),"%s",p);
-                        msgbuf[strlen(p)]=0x00;
-                    }
-                    if(strlen(p) >3) p=p+3;
-                    else    p=p+strlen(p);
-                    fieldLen = get_field_data_safe(pub_data_stru,
-                                                           atoi(msgbuf),
-                                                           msgtype,
-                                                           fieldVal,sizeof(fieldVal));
-                }
-                if(*p && *p == '?') {						// 数据域格式化
-                		p++;
-                		if(*p =='1' || *p == '3') {					// 字符串截取
-				                _ATOI(p+1, 2, start);						// 获取开始位置
-				                _ATOI(p+3, 2, end);							// 获取结束位置
-				                format_len = 1+2+2;
-				            } else if(*p =='2' || *p == '4') {	//字符串分割
-				            		_ATOI(p+2, 3, start);							// 获取开始位置
-				            		end = start;
-				            		format_len = 2+3;
-				            } 
-				            else {
-				            		format_len = 1;
-				            }
-				            fieldLen = format_msg_data(fieldVal, fieldLen, p, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
-					       		p += format_len;
-                } else if(fieldLen > 0){
-                		if(len+fieldLen > 512) {
-						            dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
-						            return -1;
-						        }
-                		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
-                }
-                len += (fieldLen < 0? 0:fieldLen);
-            } else if(*p == '\\') {
-                memcpy(msgbuf, p + 1, 2);
-                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)msgbuf, 2, 1);
-                len += 1;
-                p=p+3;
-            } else {
-                fmtMsgBuf[len] = *p;
-                len++;
-                p++;
-            }
-        }
-        fmtMsgBuf[len++] = 0;
-    }
-    add_pub_field(pub_data_stru, fldid,
-                  pub_data_stru->route_msg_type,
-                  len, fmtMsgBuf, 1);
-    return 1;
+							dcs_debug(0,0, "<%s>fieldval=[%s],tmpbuf=[%s]",__FUNCTION__,fieldVal,tmpbuf);
+							fieldLen = strlen(tmpbuf);
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen;
+							break;
+						case 907: // 流水号
+						case 916:
+							fieldLen = get_field_data_safe(pub_data_stru, atoi(msgbuf), 
+							                               DB_MSG_TYPE, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, fieldVal, fieldLen); len += fieldLen;														 						   		
+							break;
+						case 61: // 持卡人信息
+							fieldLen = get_field_data_safe(pub_data_stru,61, 
+							                               pub_data_stru->in_msg_type, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+							if(512 < len + 30)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							fieldVal[fieldLen]=0x00;
+							if( memcmp(fieldVal+2+1+1+7+1,"NM",2)==0)
+							{
+								fieldVal[2+1+1+7+1+30]=0x00;
+								rtrim(fieldVal+2+1+1+7+1);
+								memcpy(fmtMsgBuf + len, fieldVal, fieldLen); len += fieldLen;
+							}	
+							break;
+						
+						default:
+							fieldLen = get_field_data_safe(pub_data_stru, atoi(msgbuf), 
+							                               pub_data_stru->in_msg_type, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, fieldVal, fieldLen); len += fieldLen;														 						   		
+							break;
+					}
+					if( strlen(p) >3) p=p+3;
+					else	p=p+strlen(p);
+				}
+			}
+			else if(*p == '\\')
+			{
+				memcpy(msgbuf, p + 1, 2);
+				asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)msgbuf, 2, 1); len += 1;
+				p=p+3;
+			}
+			else
+			{
+					fmtMsgBuf[len] = *p;
+					len++;p++;
+			}
+		}
+		fmtMsgBuf[len++] = 0;
+	}
+	add_pub_field(pub_data_stru, fldid, 
+	              pub_data_stru->route_msg_type,
+	              len, fmtMsgBuf, 1);   
+	return 1;
 }
 
 
@@ -2678,102 +2780,134 @@ int electricity_payment_48(char *para, short fldid, glob_msg_stru *pub_data_stru
 例：交易金额：00#002
 可用余额用954域，余额用054域
 */
-int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru) {
-    char fieldVal[256 + 1], *p,*p1,tmp[512],fmtMsgBuf[512 + 1],tmpbuf[100],*msgtype;
-    int len,fieldLen, start=0, end=0, format_len =0;
+int show_format(char *para, short fldid, glob_msg_stru *pub_data_stru)
+{
+	char fieldVal[256 + 1], *p,*p1,tmp[512],fmtMsgBuf[512 + 1],tmpbuf[100];
+	int len,fieldLen;
+	
+	dcs_debug(0,0,"<%s> begin",__FUNCTION__);
+	if(memcmp("00000", pub_data_stru->center_result_code, 
+		        strlen(pub_data_stru->center_result_code))) return 1;
 
-    dcs_debug(0,0,"<%s> begin",__FUNCTION__);
-    if(memcmp("00000", pub_data_stru->center_result_code,
-              strlen(pub_data_stru->center_result_code))) return 1;
+	if( para == NULL )
+	{
+		dcs_log(0,0,"<%s> para is null",__FUNCTION__);
+		return -1;
+	}
+	len=0;
 
-    if(para == NULL) {
-        dcs_log(0,0,"<%s> para is null",__FUNCTION__);
-        return -1;
-    }
-    len=0;
+	rtrim(para);
+	p1=my_split(para,'|',tmp,sizeof(tmp));
+	if( p1 == NULL ) return -1;
+	fmtMsgBuf[len++] = 0x31; //刷新后显示
+	// 显示时间的长短
+	asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmp, 2, 0); len++; 
+	// 响应码
+	memcpy(fmtMsgBuf + len, pub_data_stru->center_result_code, 3); len += 3;
+//	flag=0;
+	for( p1=my_split(p1,'|',tmp,sizeof(tmp));p;p=my_split(p1,'|',tmp,sizeof(tmp)))
+  {		
+		p=tmp;
+		while	(*p)
+		{
+			if( *p == '#')
+			{
+				p++;
+				{
+					if( strlen(p) >3) {memcpy(tmp,p,3); tmp[3]=0x00;}
+					else {snprintf(tmp,sizeof(tmp),"%s",p); tmp[strlen(p)]=0x00;}
+					switch(atoi(tmp))
+					{
+					case FIELD_AMOUNT:
+						fieldLen = get_field_data_safe(pub_data_stru,FIELD_AMOUNT, 
+						                               pub_data_stru->in_msg_type, 
+						                               fieldVal,sizeof(fieldVal));
+						if(fieldLen <=0) break;
+						fieldVal[fieldLen]=0x00;	
+						sprintf(tmpbuf, "%.2f", atof(fieldVal)/100);
+						fieldLen = strlen(tmpbuf);
+						if(512 < len + fieldLen)
+						{
+							dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", 
+							        __FUNCTION__,p, len, fieldLen);
+							return -1;
+						}
+						memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen;
+						break;
+					case 28:
+						fieldLen = get_field_data_safe(pub_data_stru,28, 
+						                               pub_data_stru->in_msg_type, 
+						                               fieldVal,sizeof(fieldVal));
+						if(fieldLen <=0) break;
+						fieldVal[fieldLen]=0x00;	
+						if( fieldVal[0]=='C')
+							sprintf(tmpbuf, "%.2f", atof(fieldVal+1)/100);
+						else if( fieldVal[0]=='D')
+							sprintf(tmpbuf, "-%.2f", atof(fieldVal+1)/100);
+						else tmpbuf[0]=0x00;
+						fieldLen = strlen(tmpbuf);
+						if(512 < len + fieldLen)
+						{
+							dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", 
+							        __FUNCTION__,p, len, fieldLen);
+							return -1;
+						}
+						memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen;
+						break;
+					case FIELD_BALANCE:
+					case FIELD_BALANCE_1:
+						fieldLen = get_field_data_safe(pub_data_stru,atoi(tmp), 
+						                               pub_data_stru->in_msg_type, 
+						                               fieldVal,sizeof(fieldVal));
+						if(fieldLen <=0) break;
+						fieldVal[fieldLen]=0x00;
+						sprintf(tmpbuf, "%.2f", (fieldVal[27] == 'D' ? -1 : 1) * atof(fieldVal + 28)/100);
+						fieldLen = strlen(tmpbuf);
+						if(512 < len + fieldLen)
+						{
+							dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", 
+							        __FUNCTION__,p, len, fieldLen);
+							return -1;
+						}
+						memcpy(fmtMsgBuf + len, tmpbuf, fieldLen); len += fieldLen;
+						break;
+					default:
+							fieldLen = get_field_data_safe(pub_data_stru,atoi(tmp), 
+							                               pub_data_stru->in_msg_type, 
+							                               fieldVal,sizeof(fieldVal));
+							if(fieldLen <=0) break;
+							if(512 < len + fieldLen)
+							{
+								dcs_log(0, 0, "<%s>打印信息超长para[%s]-[%d]+[%d]！", 
+								        __FUNCTION__,para, len, fieldLen);
+								return -1;
+							}
+							memcpy(fmtMsgBuf + len, fieldVal, fieldLen); len += fieldLen;														 						   		
+							break;
+					}
+					if( strlen(p) >3) p=p+3;
+					else	p=p+strlen(p);
+				}
+			}
+			else if(*p == '\\')
+			{
+				memcpy(tmp, p + 1, 2);
+				asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmp, 2, 1); len += 1;
+				p=p+3;
+			}
+			else
+			{
+					fmtMsgBuf[len] = *p;
+					len++;p++;
+			}
+		}
+  }
 
-    rtrim(para);
-    p1=my_split(para,'|',tmp,sizeof(tmp));
-    if(p1 == NULL) return -1;
-    fmtMsgBuf[len++] = 0x31; //刷新后显示
-    // 显示时间的长短
-    asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmp, 2, 0);
-    len++;
-    // 响应码
-    memcpy(fmtMsgBuf + len, pub_data_stru->center_result_code, 3);
-    len += 3;
-//  flag=0;
-    for(p=my_split(p1,'|',tmp,sizeof(tmp)); p; p=my_split(p,'|',tmp,sizeof(tmp))) {
-        p=tmp;
-        while(*p) {
-            if(*p == '#') {
-                p++;
-                switch(*p++) {
-		                case '1':
-		                    msgtype = pub_data_stru->route_msg_type;
-		                    break;
-		                case '2':
-		                    msgtype = DB_MSG_TYPE;
-		                    break;
-		                default:
-		                    msgtype = pub_data_stru->in_msg_type;
-		                    break;
-		            }
-                if(strlen(p) >3) {
-                    memcpy(tmpbuf,p,3);
-                    tmpbuf[3]=0x00;
-                } else {
-                    snprintf(tmpbuf,sizeof(tmpbuf),"%s",p);
-                    tmpbuf[strlen(p)]=0x00;
-                }
-                if(strlen(p) >3) p=p+3;
-                else    p=p+strlen(p);
-                
-                fieldLen = get_field_data_safe(pub_data_stru,
-                                               atoi(tmpbuf),
-                                               msgtype,
-                                               fieldVal,sizeof(fieldVal));
-                if(*p && *p == '?') {						// 数据域格式化
-                		p++;
-                		if(*p =='1' || *p == '3') {					// 字符串截取
-				                _ATOI(p+1, 2, start);						// 获取开始位置
-				                _ATOI(p+3, 2, end);							// 获取结束位置
-				                format_len = 1+2+2;
-				            } else if(*p =='2' || *p == '4') {	//字符串分割
-				            		_ATOI(p+2, 3, start);							// 获取开始位置
-				            		end = start;
-				            		format_len = 2+3;
-				            } else {
-				            		format_len = 1;
-				            }
-				            fieldLen = format_msg_data(fieldVal, fieldLen, p, start, end, fmtMsgBuf+len, sizeof(fmtMsgBuf)-len);
-				            p += format_len;
-                } else if(fieldLen > 0) {
-                		if(len+fieldLen > 512) {
-						            dcs_log(0, 0, "<%s>显示信息超长para[%s]-[%d]+[%d]！", __FUNCTION__,para, len+fieldLen, 1);
-						            return -1;
-						        }
-                		memcpy(fmtMsgBuf + len, fieldVal, fieldLen);
-                }
-                len += (fieldLen < 0? 0:fieldLen);
-            } else if(*p == '\\') {
-                memcpy(tmpbuf, p + 1, 2);
-                asc_to_bcd((unsigned char *)fmtMsgBuf + len, (unsigned char *)tmpbuf, 2, 1);
-                len += 1;
-                p=p+3;
-            } else {
-                fmtMsgBuf[len] = *p;
-                len++;
-                p++;
-            }
-        }
-    }
-
-    if(len  > 0)
-        add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type,
-                      len, fmtMsgBuf, 1);
-    dcs_debug(fmtMsgBuf,len,"<%s> [%s]end",__FUNCTION__,fmtMsgBuf+5);
-    return len;
+	if( len  > 0)
+		add_pub_field(pub_data_stru, fldid,pub_data_stru->route_msg_type, 
+		              len, fmtMsgBuf, 1); 
+	dcs_debug(fmtMsgBuf,len,"<%s> [%s]end",__FUNCTION__,fmtMsgBuf+5);
+	return len;
 }
 
 int tpos_get_last_addidata(char *para, short flag, glob_msg_stru * pub_data_stru) {
@@ -3154,8 +3288,6 @@ int print_formater(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     char advert_head[200],advert_inf[200],advert_tail[200],tmp[256],concat[200];
     char *p,*p1,*p2,*msgtype;
     int len, i,  fieldLen, start, end, src_flag, concat_flag = 0;
-    time_t time_cl ;
-    struct tm *time_tm;
     struct TPOS_TERM_INFO terminfo;
     ICS_DEBUG(0);
     if(memcmp("00000", pub_data_stru->center_result_code,
