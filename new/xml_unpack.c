@@ -39,7 +39,7 @@ int xml_push_stack(XML_STACK *stack,char *str,char *flag) {
     return 1;
 }
 
-int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int src_len,glob_msg_stru *pub_data_stru) {
+int xml_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru) {
     XML_STACK stack;
     char flag[4],*p,tmp[512],curr_mark[64+1];
     int n,len;
@@ -49,6 +49,7 @@ int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int 
     curr_mark[0]=0x00;
     len=0;
     tmp[0]=0x00;
+    char *msg_type= pub_data_stru->in_msg_type;
     for(p=src_buf,n=src_len; *p&& n>0; p++,n--) {
 //      fprintf(stderr,"flag=[%s],tmp=[%s]\n",flag,tmp);
         if(flag[0] == '0') { // 初始状态
@@ -133,7 +134,7 @@ int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int 
                 //  在这可将TMP数据进行处理, 读栈顶
                 dcs_debug(0,0,"flag=[%s] <%s>,tmp=[%s]\n",flag,curr_mark,tmp);
                 if(0>add_pub_field(pub_data_stru,get_pub_field_id(msg_type,curr_mark),
-                                   msg_type,len-1,tmp,0)) {
+                                   msg_type,len,tmp,0)) {
                     dcs_log(0,0,"<%s> add_pub_field error! mark=[%s] len=%d,data=[%s] ",__FUNCTION__,curr_mark,len-1,tmp);
                     return -1;
                 }

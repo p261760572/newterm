@@ -8,10 +8,13 @@
 message_define *match_priv_stru(const char *msg_type,GLOB_DEF * gl_def);
 extern int iso_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
 extern int tpos_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
-extern int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
+extern int xml_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
 extern int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
-extern int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_data_stru, char *buf);
+extern int xml_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
 extern int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
+extern int json_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
+extern int json_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
+
 int add_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,int data_len,const char *data,char from );
 int update_pub_field(glob_msg_stru * pub_data_stru,short id,const char * msg_type,int data_len,const char *data,char from );
 int del_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,char from );
@@ -127,6 +130,7 @@ int specific_business_handle(char *para, short fldid, glob_msg_stru *pub_data_st
 int general_buisiness_handle(char *para, short fldid, glob_msg_stru *pub_data_stru);
 int mac_calc_cbc_iso_3des(char *para, char *src_buf, int src_len, char *mac, glob_msg_stru *pub_data_stru, int flag);
 int check_replay_cd(char *para, short flag, glob_msg_stru *pub_data_stru);
+int check_nothing(char *para, short flag, glob_msg_stru *pub_data_stru);
 int _tpos_get_work_key( glob_msg_stru *pub_data_stru);
 int update_db_pay_ret(char *para, short flag, glob_msg_stru *pub_data_stru);
 int update_db_pay_app(char *para, short flag, glob_msg_stru *pub_data_stru);
@@ -236,4 +240,6 @@ int format_msg_data(char *data, int data_len, char *format, int len_start,
 int print_formater(char *para, short fldid, glob_msg_stru *pub_data_stru);
 int show_formater(char *para, short fldid, glob_msg_stru *pub_data_stru);
 int get_data_from(char *para, short fldid, glob_msg_stru *pub_data_stru);
+int json_generate_list(char *para, short fldid, glob_msg_stru *pub_data_stru);
+
 #endif

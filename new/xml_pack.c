@@ -36,23 +36,19 @@ int pxml_push_stack(XML_PSTACK *stack,char *str) {
     return 1;
 }
 
-int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_data_stru, char *buf) {
+int xml_pack(glob_msg_stru *pub_data_stru,char *buf,int size) {
     char *p,*s,*s1,*s2,curr_node_name[64],tmp[512],str[128];
     int n,i;
     field_set *p_set;
     XML_PSTACK stack;
     if(buf == NULL) return -1;
     p=buf;
+    char *msg_type= pub_data_stru->route_msg_type;
     p_set=&pub_data_stru->route_set;
-    if(strcmp(msg_type,"TXML")!=0) {
+    if(strcmp(msg_type,"XMLP")!=0) {
         dcs_log(0,0,"<%s> not recognition msgtype[%s]!",__FUNCTION__,msg_type);
         return -1;
     }
-    if(strcmp(msg_type,priv_def->msg_type)!=0) {
-        dcs_log(0,0,"<%s> not match!  msgtype[%s], priv msgtype=[%s]",__FUNCTION__,msg_type,priv_def->msg_type);
-        return -1;
-    }
-    pub_data_stru->route_priv_def=priv_def;
     pxml_init_stack(&stack);
     curr_node_name[0]=0x00;
     for(i=0 ; i<p_set->num ; i++) {
@@ -96,7 +92,7 @@ int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_
         }
         // ÃÌº””Úƒ⁄»›
         if(0<(n=get_field_data_safe(pub_data_stru, get_pub_field_id(msg_type,str),
-                                    msg_type, tmp,sizeof(tmp)-1))) {
+                                    msg_type, tmp,sizeof(tmp)))) {
             tmp[n]=0x00;
             n=sprintf(p,"%s",tmp);
             p +=n;

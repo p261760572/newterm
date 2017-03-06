@@ -3076,7 +3076,7 @@ int format_echo_input(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                                             tmp,sizeof(tmp));
                     if(s >0) {
                         tmp[s]=0x00;
-                        fieldVal[   fldLen++]=strlen(p);
+                        fieldVal[   fldLen++]=s;
                         snprintf(fieldVal + fldLen , sizeof(fieldVal)-fldLen,"%s", tmp);
                         fldLen +=s;
                     } else {

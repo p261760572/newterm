@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <json-c/json.h>
 #include "base.h"
 #include "tools.h"
 #include "db_qfunc.h"
@@ -27,7 +28,7 @@ int my_substring(char *buf, int buf_len, char type, int start, int end,
 			end = MIN(buf_len, start+end);
 		if(type == 0x01)
 			end = MIN(buf_len, end);
-		if(end < start) end = buf_len;
+		if(end <= start) end = buf_len;
 		
 		n = MIN(size-1, end-start);
 		memcpy(data_out, buf+start, n);
@@ -931,10 +932,11 @@ int make_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
             } else if(*p =='2' || *p == '4') {
             		_ATOI(p+2, 3, start);							// 获取开始位置
             		end = start;
-            } else {
+            } 
+            /*else {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
-            }
+            }*/
             _ATOI(p+6, 2, i);								// 获取字段长度
             //dcs_debug(0,0,"at %s(%s:%d) memcpy[%d]",__FUNCTION__,__FILE__,__LINE__,i);
             memcpy(fieldName, p+8, i);			// 获取字段名称
@@ -1006,10 +1008,11 @@ int get_msg_data(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                 _ATOI(p+2, 2, start);
                 end = start;
                 offset = 1+2+1;					// 1分隔符， 2起止符， 1结束符
-            }	else {
+            }	
+            /*else {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
-            }
+            }*/
 	       		n = format_msg_data(fieldVal, fieldLen, p, start, end, p1, sizeof(tmpBuf)-strlen(tmpBuf)-1);
 	       		p1 += n;
 	       		p += offset+1;
@@ -2849,6 +2852,12 @@ int check_replay_cd(char *para, short flag, glob_msg_stru *pub_data_stru) {
     return 1;
 }
 
+int check_nothing(char *para, short flag, glob_msg_stru *pub_data_stru) {
+    ICS_DEBUG(0);
+    
+    return 1;
+}
+
 int update_db_pay_ret(char *para, short flag, glob_msg_stru *pub_data_stru) {
     tl_trans_log_def TransLog;
     char fieldVal[1024 + 1];
@@ -3628,10 +3637,11 @@ int get_data_from(char *para, short fldid, glob_msg_stru *pub_data_stru) {
                 _ATOI(p+2, 2, start);
                 end = start;
                 offset = 1+2+1;					// 1分隔符， 2起止符， 1结束符
-            }	else {
+            }	
+            /*else {
                 dcs_log(0, 0, "<%s>参数[%s]设置出错", __FUNCTION__, p);
                 return -1;
-            }
+            }*/
 	       		n = format_msg_data(fieldVal, fieldLen, p, start, end, p1, sizeof(tmpBuf)-strlen(tmpBuf)-1);
 	       		p1 += n;
 	       		p += offset+1;
@@ -3648,3 +3658,38 @@ int get_data_from(char *para, short fldid, glob_msg_stru *pub_data_stru) {
     return add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type,
                          strlen(tmpBuf), tmpBuf, 1);
 }
+
+int json_generate_list(char *para, short fldid, glob_msg_stru *pub_data_stru) {
+		char fieldVal[1024 + 1], tmpBuf[1024 + 1], key[20], text[50];
+    int fieldLen, array_len, data_len, i, len_key, len_text;
+    struct json_object *obj, *list;
+    rtrim(para);
+    
+    memset(fieldVal, 0, sizeof(fieldVal));
+    fieldLen = get_field_data_safe(pub_data_stru,
+                                   get_pub_field_id(pub_data_stru->in_msg_type,para),
+                                   pub_data_stru->in_msg_type,fieldVal,sizeof(fieldVal));
+    if(fieldLen <= 0) return 0;
+    
+    list = json_tokener_parse(fieldVal);
+    if(!list || json_object_get_type(list) != json_type_array) return 0;
+    
+    data_len = 1;
+    array_len = json_object_array_length(list);
+    for(i = 0; i < array_len; i++) {
+    		obj = json_object_array_get_idx(list, i);
+    		memset(key, 0, sizeof(key));
+    		memset(text, 0, sizeof(text));
+    		len_key = sprintf(key, "%s%s%s", json_object_get_string(json_object_object_get(obj, "bmcode")),
+    									json_object_get_string(json_object_object_get(obj, "custcode")),
+    									json_object_get_string(json_object_object_get(obj, "sbcode")));
+    		len_text = sprintf(text, "%s-编号%s", json_object_get_string(json_object_object_get(obj, "custname")),
+    									json_object_get_string(json_object_object_get(obj, "sbcode")));
+    		sprintf(tmpBuf+data_len, "%c%s%c%s", len_text, text, len_key, key);
+    		data_len += len_text+len_key+2;
+    }
+    tmpBuf[0] = array_len;
+		return add_pub_field(pub_data_stru, fldid, pub_data_stru->route_msg_type,
+                         data_len, tmpBuf, 1);
+}
+

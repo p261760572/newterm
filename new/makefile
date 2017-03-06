@@ -1,9 +1,9 @@
 
 #include Make.defines
-LIBS=$(LIB) -L../lib  -ldcsutil -lfold
+LIBS=$(LIB) -L../lib  -L/usr/local/lib -ldcsutil -lfold -ljson-c
 BIN =$(ICS_HOME)/bin
-CFLAGS=-I ./inc 
-ORACLE_LIB= -L$(ORACLE_HOME)/lib -lsqlplus -lclntsh
+CFLAGS=-I ./inc -I/usr/local/include
+ORACLE_LIB= -L$(ORACLE_HOME)/lib -lsqlplus -lclntsh 
 
 #EXE = TransRcv 
 EXE =  termsvr timescanner sign 
@@ -12,13 +12,13 @@ EXE =  termsvr timescanner sign
 #      db_dfunc.o db_dssfunc.o iso_pack.o iso_unpack.o tpos_pack.o  xml_pack.o xml_unpack.o util_db.o \
 #      tpos_util.o db_tpos_qfunc.o db_tpos_ufunc.o zpos_util.o db_zpos_qfunc.o secuLib.o
 OBJ=main.o  load_config.o define_data.o db_dssfunc.o app_proc.o db_qfunc.o \
-		timeout_proc.o general_util.o iso_pack.o iso_unpack.o tpos_pack.o  xml_pack.o xml_unpack.o \
-		util_db.o tpos_util.o db_tpos_qfunc.o db_tpos_ufunc.o zpos_util.o db_zpos_qfunc.o \
-		secuLib.o db_ifunc.o db_ufunc.o request_proc.o respose_proc.o  \
+		timeout_proc.o general_util.o iso_pack.o iso_unpack.o tpos_pack.o json_pack.o json_unpack.o \
+		xml_pack.o xml_unpack.o util_db.o tpos_util.o db_tpos_qfunc.o db_tpos_ufunc.o zpos_util.o db_zpos_qfunc.o \
+		secuLib.o db_ifunc.o db_ufunc.o request_proc.o respose_proc.o \
 		unpack.o pack.o tpos_unpack.o db_user_func.o db_dfunc.o db.o
 OBJ1= load_config.o define_data.o db_dssfunc.o app_proc.o db_qfunc.o \
 		timeout_proc.o general_util.o iso_pack.o iso_unpack.o tpos_pack.o  xml_pack.o xml_unpack.o \
-		util_db.o tpos_util.o db_tpos_qfunc.o db_tpos_ufunc.o zpos_util.o db_zpos_qfunc.o \
+		json_pack.o json_unpack.o util_db.o tpos_util.o db_tpos_qfunc.o db_tpos_ufunc.o zpos_util.o db_zpos_qfunc.o \
 		secuLib.o db_ifunc.o db_ufunc.o request_proc.o respose_proc.o  \
 		unpack.o pack.o tpos_unpack.o db_user_func.o db_dfunc.o db.o
 

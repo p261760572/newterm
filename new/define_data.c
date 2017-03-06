@@ -12,6 +12,7 @@ struct unpack_func_def unpack_func_proc[]= {  //数据解包处理函数
     {"TPOS",tpos_unpack},
     {"XMLP", xml_unpack},
     {"ZFYP",iso_unpack},
+    {"JSON",json_unpack},
     {"", NULL}
 };
 struct pack_func_def pack_func_proc[]= { //数据打包处理函数
@@ -19,6 +20,7 @@ struct pack_func_def pack_func_proc[]= { //数据打包处理函数
     {"TPOS",tpos_pack},
     {"ZFYP",iso_pack},
     {"XMLP", xml_pack},
+    {"JSON", json_pack},
     {"",NULL}
 };
 
@@ -144,7 +146,7 @@ FLDSET_DEF gl_priv_field_conver[]= {  //特殊域转换处理函数
     {"TPOS_DISCOUNT_RESULT",tpos_discount_result},//检查是否参与折扣
     {"CHANGE_DB_DATA",change_db_data},//
     {"CON_DEL_FLD48",con_del_fld48},//
-
+		{"JSON_GENERATE_LIST", json_generate_list},
     {NULL, NULL}
 };
 
@@ -199,6 +201,7 @@ FLDSET_DEF gl_check_and_match[]= {
     {"ISO_CMAC_ALL_3DES", iso_check_mac_all_3des}, //ISO校验MAC，全报文3DES模式
     {"ISO_CMAC_CBC_3DES", iso_check_mac_cbc_3des}, //ISO校验MAC，CBC 3DES模式
     {"CHECK_REPLAY_CD", check_replay_cd},
+    {"CHECK_NOTHING", check_nothing},
     {NULL, NULL}
 };
 struct DEFAULT_PROC gl_db_qproc[]= {
