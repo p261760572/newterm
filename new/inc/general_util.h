@@ -93,6 +93,7 @@ int tpos_check_prog_ver(glob_msg_stru * pub_data_stru);
 int tpos_check_menu_ver(glob_msg_stru * pub_data_stru);
 int reversed_replay(glob_msg_stru * pub_data_stru);
 int find_replay(glob_msg_stru * pub_data_stru);
+int notify_replay(glob_msg_stru * pub_data_stru);
 int sign_m_p_32(glob_msg_stru * pub_data_stru);
 int result_query_tl(glob_msg_stru * pub_data_stru);
 int result_query_hnyl(glob_msg_stru * pub_data_stru);

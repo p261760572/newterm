@@ -2402,6 +2402,32 @@ int find_replay(glob_msg_stru * pub_data_stru) {
     return 0;
 }
 
+int notify_replay(glob_msg_stru * pub_data_stru) {
+//  tl_tpos_log_def tpos_log;
+    tl_trans_log_def transLog;
+    char msgkey[100 + 1], *p,tmp[64];
+    ICS_DEBUG(0);
+    snprintf(msgkey,sizeof(msgkey),"%s", pub_data_stru->timeout_table.first_key);
+    rtrim(msgkey);
+    p=my_split(msgkey, ',',tmp,sizeof(tmp));
+    if(p == NULL) {
+        dcs_log(0, 0, "<FILE:%s,LINE:%d>½âÎöfirst_key[%s]Ê§°Ü£¡", __FILE__, __LINE__, pub_data_stru->timeout_table.first_key);
+        return -1;
+    }
+    if(!(memcmp(pub_data_stru->center_result_code, "00000", strlen(pub_data_stru->center_result_code)) == 0 ||
+         strcmp(pub_data_stru->center_result_code, CODE_NOT_EXIST) == 0)) {
+        /*if(0 < pub_data_stru->timeout_table.num--) {
+            pub_data_stru->timeout_table.invalid_time = time(NULL)+(30-pub_data_stru->timeout_table.num)*SYS_TIME_OUT;
+            insert_timeout_table(pub_data_stru, 2);
+        }
+        dcs_debug(0,0,"<%s> timeout num=[%d]",__FUNCTION__,pub_data_stru->timeout_table.num);*/
+    }
+
+    update_db_app_ret(NULL, 0, pub_data_stru);
+
+    return 0;
+}
+
 int sign_m_p_32(glob_msg_stru * pub_data_stru) {
     char tmpbuf[256 + 1];
     ICS_DEBUG(0);

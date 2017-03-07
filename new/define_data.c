@@ -59,6 +59,7 @@ struct DEFAULT_PROC gl_direct_limit[]= { //直接应答交易检测处理函数
 struct DEFAULT_PROC gl_end_proc[]= {     // 交易在中心结束处理函数
     {"reversed_replay", reversed_replay},
     {"find_replay", find_replay},
+    {"notify_replay", notify_replay},
     {"sign_m_p_32", sign_m_p_32},
     {"result_query_tl", result_query_tl},
     {"result_query_hnyl", result_query_hnyl},
