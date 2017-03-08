@@ -27,19 +27,21 @@ int my_substring(char *buf, int buf_len, char type, int start, int end,
 			end = MIN(buf_len, start+end);
 		if(type == 0x01)
 			end = MIN(buf_len, end);
-		if(end < start) end = buf_len;
+		if(end <= start) end = buf_len;
 		
 		n = MIN(size-1, end-start);
 		memcpy(data_out, buf+start, n);
 		data_out[n] = '\0';
 		if(n>0 && func) 
 			func(data_out);
-		return strlen(data_out);
+		dcs_log(0, 0, "<at %s:%d>substring format end; data:%s", data_out);
+		return n;
 }
 
 int my_separate(char *buf, int buf_len, const char div, int start, int end, 
 								char *data_out, int size, void (*func)(char *)) {
 		char *p, *s;
+		char temp[512];
 		int count = 0, len = 0, n;
 		if(!buf || !buf[0]) {
 				data_out[0] = '\0';
@@ -49,9 +51,12 @@ int my_separate(char *buf, int buf_len, const char div, int start, int end,
 		for(p = buf, s = p; count <= end; p++) {
 	      if(*p == div || *p == '\0') {
         		if(count >= start) {
-				 	      n = MIN(size-1-len, p-s); 				
-				 	      if(n <= 0) break;
-		            memcpy(data_out+len, s, n);
+        				memset(temp, 0, sizeof(temp));
+        				memcpy(temp, s, p-s);
+				 	      if(func) func(temp);
+				 	      n = MIN(size-1-len, strlen(temp)); 				
+				 	      if(n < 0) break;
+		            memcpy(data_out+len, temp, n);
 		            len += n;
           	}
           	if(*p == '\0')  break;
@@ -61,9 +66,8 @@ int my_separate(char *buf, int buf_len, const char div, int start, int end,
     }
     
     data_out[len] = '\0';
-    if(len>0 && func) 
-			func(data_out);
-		return strlen(data_out);
+    dcs_log(0, 0, "<at %s:%d>separate format end; data:%s", __func__, __LINE__, data_out);
+		return len;
 }
 
 int my_date_time(char *src_time, int src_len, int type, char *format_time, int size) {
@@ -105,6 +109,7 @@ int format_msg_data(char *data, int data_len, char *format, int len_start,
 		int format_len = 0;
 		char format_type, div;
 		
+		dcs_log(0, 0, "<at %s:%d>data:%s len=%d", __FUNCTION__, __LINE__, data, data_len);
 		format_type = format[0];
 				
 		if(format_type == '1') {											// ×Ö·ûÎ»½ØÈ¡
