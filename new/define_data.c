@@ -222,6 +222,7 @@ UPDATE_DB_DEF gl_update_db[]= {
 };
 struct HEAD_PROC gl_head_proc[]= { // iso打包结束时对包头的特殊处理
     {"TL_HEAD_PROC", iso_tl_head_proc},
+    {"NX_HEAD_PROC", xml_nx_head_proc},
     {NULL,NULL}
 };
 NOTIFY_DEF gl_end_nofify[]= { //交易完成通知处理函数

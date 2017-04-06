@@ -694,7 +694,7 @@ int get_bin_route(glob_msg_stru * pub_data_stru) {
 }
 
 int get_route_trans_set(glob_msg_stru * pub_data_stru) {
-    char field_msg[512 + 1],field_sys[512 + 1],field_db[512 + 1],*p,c,tmp[64];
+    char field_msg[512 + 1],field_sys[512 + 1],field_db[512 + 1],*p,*p2,c,tmp[64],tmp2[64];
     int i, j,field_id,n=0;
     ICS_DEBUG(0);
     memset(field_msg,0,sizeof(field_msg));
@@ -730,7 +730,9 @@ int get_route_trans_set(glob_msg_stru * pub_data_stru) {
     p=my_split(field_sys,',',tmp,sizeof(tmp));
 
     for(i = 0; p!=NULL; i++) {
-        pub_data_stru->route_set.field.field_id[i] = get_pub_field_id(pub_data_stru->route_msg_type,tmp);
+    		strcpy(tmp2, tmp);
+    		if((p2 = strstr(tmp2, "|")) && (*p2 = '\0')) ;
+        pub_data_stru->route_set.field.field_id[i] = get_pub_field_id(pub_data_stru->route_msg_type,tmp2);
         if(pub_data_stru->route_set.field.field_id[i] <0) {
             dcs_log(0,0,"at %s(%s:%d), field_id[%s]-[%s] error!",
                     __FUNCTION__,__FILE__,__LINE__,pub_data_stru->route_msg_type, tmp);

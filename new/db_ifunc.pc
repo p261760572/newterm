@@ -436,7 +436,7 @@ int insert_expenses(char *para, char *inst_code,glob_msg_stru *pub_data_stru) {
         }
         if(amount*100 == sum) {
             exec sql update expense_info set oper_in='A' , proc_st='2',RECEIPTED_TYPE='4',
-            RECEIPTED_BY ='system',RECEIPTED_TIME=sysdate,RECEIPTED_DATE=sysdate where EXPENSE_NO = :p and oper_in='I' and proc_st='1';
+            RECEIPTED_BY ='system',RECEIPTED_TIME=sysdate,RECEIPTED_DATE=sysdate where EXPENSE_NO = :p and proc_st='1';
             if(sqlca.sqlcode != 0) {
 				dcs_log(0, 0, "at %s(%s:%d) sqlcode=%d, update expense_info Error, EXPENSE_NO=[%s]",__FUNCTION__,__FILE__,__LINE__, sqlca.sqlcode, p);
             }

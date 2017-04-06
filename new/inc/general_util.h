@@ -8,9 +8,9 @@
 message_define *match_priv_stru(const char *msg_type,GLOB_DEF * gl_def);
 extern int iso_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
 extern int tpos_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
-extern int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
+extern int xml_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru);
 extern int iso_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
-extern int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_data_stru, char *buf);
+extern int xml_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
 extern int tpos_pack(glob_msg_stru *pub_data_stru,char *buf,int size);
 int add_pub_field(glob_msg_stru * pub_data_stru,short id,const char *msg_type,int data_len,const char *data,char from );
 int update_pub_field(glob_msg_stru * pub_data_stru,short id,const char * msg_type,int data_len,const char *data,char from );
@@ -53,6 +53,7 @@ int write_voidtrans_to_fold(timeout_stru *table);
 int iso_cbc_str(char *para, char *macBuf, int *mac_len, char * field_name, const message_define *p_def, const char *buf, glob_msg_stru *pub_data_stru, int len_type);
 
 int iso_tl_head_proc ( char *buf ,int start, int len);
+int xml_nx_head_proc ( char *buf ,int start, int len);
 int CalcFee(char *caFeeType, char *caFee, int amount, char *caKee);
 void print_field_data(glob_msg_stru *pub_data_stru, char *fileName, int fileline, int d, int fieldid, char *fieldName, char *msg_type);
 int get_msg_data_fill(char *para, short fldid, glob_msg_stru *pub_data_stru);

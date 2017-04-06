@@ -36,15 +36,18 @@ int pxml_push_stack(XML_PSTACK *stack,char *str) {
     return 1;
 }
 
-int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_data_stru, char *buf) {
+int xml_pack(glob_msg_stru *pub_data_stru, char *buf, int size) {
     char *p,*s,*s1,*s2,curr_node_name[64],tmp[512],str[128];
     int n,i;
+    const char *msg_type = pub_data_stru->route_msg_type;
+    message_define *priv_def = pub_data_stru->route_priv_def;
     field_set *p_set;
     XML_PSTACK stack;
+    int head_flag,headlen,msgid_flag,bitmap_flag,len_type,len;
     if(buf == NULL) return -1;
     p=buf;
     p_set=&pub_data_stru->route_set;
-    if(strcmp(msg_type,"TXML")!=0) {
+    if(strcmp(msg_type,"XMLP")!=0) {
         dcs_log(0,0,"<%s> not recognition msgtype[%s]!",__FUNCTION__,msg_type);
         return -1;
     }
@@ -53,6 +56,28 @@ int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_
         return -1;
     }
     pub_data_stru->route_priv_def=priv_def;
+    if(0>get_iso_para(msg_type,&head_flag,&headlen,&msgid_flag,
+                      &bitmap_flag,&len_type)) {
+        head_flag=0;
+        headlen=0;
+        msgid_flag=0;
+        bitmap_flag=1;
+        len_type=0;
+    }
+    if(head_flag) {
+        memset(tmp, 0, sizeof(tmp));
+        len=get_field_data_safe(pub_data_stru,get_pub_field_id(msg_type, "TPDU"),
+            												msg_type,tmp,sizeof(tmp));
+        if(0 > len) {
+            dcs_log(0, 0, "<%s>ISO8583报文类型[%s]要求包头，但未设置报文头",
+                    __FUNCTION__, msg_type);
+            return -1;
+        }
+        memcpy(p, tmp ,headlen);
+        p += headlen;
+    }
+    n = sprintf(p, "<?xml version=\"1.0\" encoding=\"GBK\"?>");
+    p += n;
     pxml_init_stack(&stack);
     curr_node_name[0]=0x00;
     for(i=0 ; i<p_set->num ; i++) {
@@ -86,10 +111,9 @@ int xml_pack(const char *msg_type, message_define *priv_def, glob_msg_stru *pub_
             }
         }
 
-        n=sprintf(p,"<%s>",s);
-        p += n;
+      	n=sprintf(p,"<%s>",str);
+      	p += n;
         strcpy(curr_node_name,str);
-
         if(! pxml_push_stack(&stack,str)) {
             dcs_log(0,0,"<%s>stack  is overflow!",__FUNCTION__);
             return -1;

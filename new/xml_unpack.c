@@ -39,17 +39,32 @@ int xml_push_stack(XML_STACK *stack,char *str,char *flag) {
     return 1;
 }
 
-int xml_unpack(const char *msg_type, message_define *priv_def,char *src_buf,int src_len,glob_msg_stru *pub_data_stru) {
+int xml_unpack(char *src_buf,int src_len,glob_msg_stru *pub_data_stru) {
     XML_STACK stack;
     char flag[4],*p,tmp[512],curr_mark[64+1];
     int n,len;
     //³õÊ¼»¯Õ»;
     strcpy(flag,"000");
+    int head_flag,headlen,msgid_flag,bitmap_flag,len_type;
+    const char *msg_type = pub_data_stru->in_msg_type;
+    p=src_buf,n=src_len;
+    if(0>get_iso_para(msg_type,&head_flag,&headlen,&msgid_flag,
+                      &bitmap_flag,&len_type)) {
+        head_flag=0;
+        headlen=0;
+        msgid_flag=0;
+        bitmap_flag=1;
+        len_type=0;
+    }
+    if(head_flag) {
+        p=src_buf+headlen;
+        n=src_len-headlen;
+    }
     xml_init_stack(&stack);
     curr_mark[0]=0x00;
     len=0;
     tmp[0]=0x00;
-    for(p=src_buf,n=src_len; *p&& n>0; p++,n--) {
+    for(; *p&& n>0; p++,n--) {
 //      fprintf(stderr,"flag=[%s],tmp=[%s]\n",flag,tmp);
         if(flag[0] == '0') { // ³õÊ¼×´Ì¬
             if(flag[1] =='0') { //ÎÞÐò×´Ì¬

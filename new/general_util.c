@@ -34,7 +34,7 @@ int my_substring(char *buf, int buf_len, char type, int start, int end,
 		data_out[n] = '\0';
 		if(n>0 && func) 
 			func(data_out);
-		dcs_log(0, 0, "<at %s:%d>substring format end; data:%s", data_out);
+		dcs_log(0, 0, "<at %s:%d>substring format end; data:%s", __FILE__, __LINE__, data_out);
 		return n;
 }
 
@@ -1462,6 +1462,13 @@ int iso_tl_head_proc(char *buf ,int start, int len) {
     return 1;
 }
 
+int xml_nx_head_proc(char *buf ,int start, int len) {
+    char tmp[10];
+
+    sprintf(tmp,"%08d",len-start);
+    memcpy(buf,tmp,8);
+    return 1;
+}
 
 int CalcFee(char *caFeeType, char *caFee, int amount, char *caKee) {
     char *p, *p1;
